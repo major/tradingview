@@ -1,0 +1,65 @@
+// Copyright 2024 Major Hayden
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//@version=5
+indicator("High Volume Close (HVC) Finder", shorttitle = "HVC Finder", overlay=true, max_labels_count=500)
+
+// USER INPUTS
+i_MALength          = input.int(20,     minval=1,   title="Volume MA Length")
+i_VolumeThreshold   = input.float(3.0,              title="Volume multiplier",  tooltip = "Volume required over moving average to classify as an HVC (3 means 300%)")
+i_MaxLines          = input.int(5,      minval=1,   title="Events displayed",   tooltip = "Set the maximum number of recent HVC lines to draw")
+
+// COLORS
+i_LabelColor        = input(color.yellow,   title="HVC Label",  inline="Colors")
+i_LabelTextColor    = input(color.black,    title="Text",       inline="Colors")
+i_LineColor         = input(color.yellow,   title="Line",       inline="Colors")
+
+// DISPLAY SETTINGS
+i_ShowPercentage    = input(true,       title="Show % Multiplier",  group="Display Settings")
+i_ShowClosingPrice  = input(false,      title="Show closing price", group="Display Settings")
+
+// Calculate the moving average of volume
+vol_ma = ta.sma(volume, i_MALength)
+
+// Check if the volume exceeds the threshold
+high_vol = volume > (vol_ma * i_VolumeThreshold)
+vol_ratio = (volume / vol_ma) * 100
+vol_str = str.tostring(vol_ratio, "#") + "%"
+close_str = "$" + str.tostring(close)
+
+// Construct label text dynamically
+var label_text = ""
+if i_ShowPercentage
+    label_text := vol_str
+if i_ShowClosingPrice
+    label_text := label_text + (i_ShowPercentage ? "\n" : "") + close_str
+
+// Array to manage the lines
+var line_array = array.new_line(i_MaxLines)
+
+if high_vol
+    // Add a label to the candlestick
+    label.new(bar_index, high, text=label_text, style=label.style_label_down, color=i_LabelColor, textcolor=i_LabelTextColor)
+
+    // Create a new line
+    new_line = line.new(bar_index, close, bar_index + 1, close, color=i_LineColor, width=1, extend=extend.right, style=line.style_dotted)
+    
+    // Add the new line to the array
+    array.push(line_array, new_line)
+    
+    // Ensure the array only keeps the last 5 lines
+    if array.size(line_array) > i_MaxLines
+        // Remove the oldest line
+        old_line = array.shift(line_array)
+        line.delete(old_line)
