@@ -1,0 +1,36 @@
+//@version=5
+indicator("Relative Measured Volatility (RMV)", shorttitle="RMV", overlay=true)
+
+// Inputs
+lookbackPeriod = input.int(5, minval=1, title="Lookback Period")
+shortLookback1 = input.int(3, minval=1, title="Short-term ATR Lookback 1")
+shortLookback2 = input.int(5, minval=1, title="Short-term ATR Lookback 2")
+shortLookback3 = input.int(8, minval=1, title="Short-term ATR Lookback 3")
+rmvThreshold = input.float(15, minval=0, maxval=100, title="RMV Threshold", tooltip="Show orange circle when RMV drops below this value")
+
+// Short-term ATRs
+short1 = ta.atr(shortLookback1)
+short2 = ta.atr(shortLookback2)
+short3 = ta.atr(shortLookback3)
+shortAvg = (short1 + short2 + short3) / 3
+
+// Highest and lowest shortAvg over lookback period
+highestShortAvg = ta.highest(shortAvg, lookbackPeriod)
+lowestShortAvg = ta.lowest(shortAvg, lookbackPeriod)
+
+// RMV Calculation
+rmv = (shortAvg - lowestShortAvg) / math.max(highestShortAvg - lowestShortAvg, 0.001) * 100
+
+// Determine if RMV is below threshold
+belowThreshold = rmv < rmvThreshold
+
+// Calculate position for the circle (5% below the low)
+markerPosition = low * 0.95
+
+// Plot the circle when RMV is below threshold
+plotshape(belowThreshold, title="Low RMV Signal", location=location.belowbar, 
+          style=shape.circle, size=size.auto, color=color.new(color.orange, 50))
+
+// Optional: Add alert condition
+alertcondition(belowThreshold, title="RMV Below Threshold", 
+               message="RMV dropped below {{plot(\"RMV Threshold\")}}: Current RMV = {{plot(\"RMV\")}}")
