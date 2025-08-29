@@ -1,36 +1,58 @@
-//@version=5
-indicator("Relative Measured Volatility (RMV)", shorttitle="RMV", overlay=true)
+//@version=6
+indicator('Relative Measured Volatility Circles', shorttitle = 'RMVCircles', overlay = true)
 
-// Inputs
-lookbackPeriod = input.int(5, minval=1, title="Lookback Period")
-shortLookback1 = input.int(3, minval=1, title="Short-term ATR Lookback 1")
-shortLookback2 = input.int(5, minval=1, title="Short-term ATR Lookback 2")
-shortLookback3 = input.int(8, minval=1, title="Short-term ATR Lookback 3")
-rmvThreshold = input.float(15, minval=0, maxval=100, title="RMV Threshold", tooltip="Show orange circle when RMV drops below this value")
+// Input parameters (must match the main RVM indicator)
+lookbackPeriod = input.int(15, title = 'Lookback Period', minval = 1)
+smoothing = input.bool(false, title = 'Enable Smoothing')
+smoothingLength = input.int(3, title = 'Smoothing Length', minval = 1)
+circleThreshold = input.float(15, title = 'Circle Alert Threshold', minval = 0, maxval = 100, step = 1)
+circleColor = input.color(color.orange, title = 'Circle Color')
+circleOpacity = input.int(50, title = 'Circle Opacity %', minval = 0, maxval = 100, step = 10)
+circleOffset = input.float(0.5, title = 'Circle Offset Multiplier', minval = 0.1, maxval = 2.0, step = 0.1)
 
+// Recreate RVM calculation (same logic as main indicator)
 // Short-term ATRs
-short1 = ta.atr(shortLookback1)
-short2 = ta.atr(shortLookback2)
-short3 = ta.atr(shortLookback3)
+short1 = ta.atr(3)
+short2 = ta.atr(5)
+short3 = ta.atr(8)
 shortAvg = (short1 + short2 + short3) / 3
 
-// Highest and lowest shortAvg over lookback period
-highestShortAvg = ta.highest(shortAvg, lookbackPeriod)
-lowestShortAvg = ta.lowest(shortAvg, lookbackPeriod)
+// Long-term ATRs
+long1 = ta.atr(55)
+long2 = ta.atr(89)
+long3 = ta.atr(144)
+longAvg = (long1 + long2 + long3) / 3
 
-// RMV Calculation
-rmv = (shortAvg - lowestShortAvg) / math.max(highestShortAvg - lowestShortAvg, 0.001) * 100
+// Combined ATR value
+combinedATR = (shortAvg + longAvg) / 2
 
-// Determine if RMV is below threshold
-belowThreshold = rmv < rmvThreshold
+// Highest and lowest combined ATR over lookback period
+highestCombinedATR = ta.highest(combinedATR, lookbackPeriod)
+lowestCombinedATR = ta.lowest(combinedATR, lookbackPeriod)
 
-// Calculate position for the circle (5% below the low)
-markerPosition = low * 0.95
+// RVM Calculation
+maxx = math.max(highestCombinedATR - lowestCombinedATR, 0.0001)
+normRVM = (combinedATR - lowestCombinedATR) / maxx * 100
 
-// Plot the circle when RMV is below threshold
-plotshape(belowThreshold, title="Low RMV Signal", location=location.belowbar, 
-          style=shape.circle, size=size.auto, color=color.new(color.orange, 50))
+// Wilder's smoothing function
+wilders_smooth(src, length) =>
+    var float smoothed = na
+    smoothed := na(smoothed[1]) ? src : (smoothed[1] * (length - 1) + src) / length
+    smoothed
 
-// Optional: Add alert condition
-alertcondition(belowThreshold, title="RMV Below Threshold", 
-               message="RMV dropped below {{plot(\"RMV Threshold\")}}: Current RMV = {{plot(\"RMV\")}}")
+smoothRVM = wilders_smooth(normRVM, smoothingLength)
+RVM = smoothing ? smoothRVM : normRVM
+
+// Calculate position for circles below bars
+circlePosition = low - ta.atr(14) * circleOffset
+
+// Plot circles when RVM is below threshold
+plotshape(RVM < circleThreshold ? circlePosition : na, style = shape.circle, location = location.absolute, color = color.new(circleColor, circleOpacity), size = size.auto, title = 'RVM Alert Circle')
+
+// Optional: Add text label showing RVM value
+showValueLabel = input.bool(false, title = 'Show RVM Value at Circles')
+if showValueLabel and RVM < circleThreshold
+    label.new(bar_index, circlePosition - ta.atr(14) * 0.2, str.tostring(RVM, '#.#'), color = color.new(color.white, 100), textcolor = circleColor, style = label.style_none, size = size.tiny)
+
+// Alert condition
+alertcondition(RVM < circleThreshold, title = 'RVM Below Threshold', message = 'RVM: {{plot_0}} is below threshold {{threshold}}')
