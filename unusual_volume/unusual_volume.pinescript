@@ -64,11 +64,11 @@ show_sma_mult = priority_mode ? is_sma_multiplier and not is_all_time_high : is_
 show_low_volume = priority_mode ? is_low_volume and not is_sma_multiplier and not is_all_time_high : is_low_volume
 
 // Plot markers with tiny size
-plotshape(series = show_all_time, location = location.abovebar, style = selected_shape, size = size.tiny, color = color_all_time, title = 'All-Time High Volume')
+plotshape(series = show_all_time, location = location.abovebar, style = selected_shape, size = size.auto, color = color_all_time, title = 'All-Time High Volume')
 
-plotshape(series = show_sma_mult, location = location.abovebar, style = selected_shape, size = size.tiny, color = color_sma_mult, title = 'High Volume (SMA Multiple)')
+plotshape(series = show_sma_mult, location = location.abovebar, style = selected_shape, size = size.auto, color = color_sma_mult, title = 'High Volume (SMA Multiple)')
 
-plotshape(series = show_low_volume, location = location.abovebar, style = selected_shape, size = size.tiny, color = color_low_volume, title = 'Low Volume')
+plotshape(series = show_low_volume, location = location.abovebar, style = selected_shape, size = size.auto, color = color_low_volume, title = 'Low Volume')
 
 // Add alerts
 alertcondition(is_all_time_high, title = 'All-Time High Volume', message = 'All-time high volume detected on {{ticker}}')
