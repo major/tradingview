@@ -78,7 +78,17 @@ show_all_time = priority_mode ? is_all_time_high : is_all_time_high
 show_sma_mult = priority_mode ? is_sma_multiplier and not is_all_time_high : is_sma_multiplier
 show_low_volume = priority_mode ? is_low_volume and not is_sma_multiplier and not is_all_time_high : is_low_volume
 
-// Plot markers with tiny size
+// Plot a label above the bar or a yellow circle depending on configuration
+if show_multiplier_labels and is_sma_multiplier
+    multiplier = volume / volume_sma
+    multiplier_rounded = math.round(multiplier)
+    label_text = str.tostring(multiplier_rounded) + "x"
+    label.new(bar_index, close, label_text, 
+              color = label_bg_color, 
+              textcolor = label_color, 
+              style = label.style_label_right,
+              size = size.normal)
+
 plotshape(series = show_all_time, location = location.abovebar, style = selected_shape, size = size.auto, color = color_all_time, title = 'All-Time High Volume')
 plotshape(series = show_sma_mult, location = location.abovebar, style = selected_shape, size = size.auto, color = color_sma_mult, title = 'High Volume (SMA Multiple)')
 plotshape(series = show_low_volume, location = location.abovebar, style = selected_shape, size = size.auto, color = color_low_volume, title = 'Low Volume')
@@ -96,14 +106,3 @@ plot(all_time_high_volume, title = 'All-Time High Volume', display = display.dat
 // Draw rectangles on high volume days (yellow circles)
 if show_rectangles and is_sma_multiplier
     box.new(bar_index, high, bar_index + rect_bars_extend, low, border_color = na, bgcolor = color.new(rect_color, rect_transparency))
-
-// Draw labels with volume multiplier on high volume days (yellow circles)
-if show_multiplier_labels and is_sma_multiplier
-    multiplier = volume / volume_sma
-    multiplier_rounded = math.round(multiplier)
-    label_text = str.tostring(multiplier_rounded) + "x"
-    label.new(bar_index, high * 1.01, label_text, 
-              color = label_bg_color, 
-              textcolor = label_color, 
-              style = label.style_label_down,
-              size = size.small)
