@@ -8,7 +8,6 @@ smoothingLength = input.int(3, title = 'Smoothing Length', minval = 1)
 circleThreshold = input.float(15, title = 'Circle Alert Threshold', minval = 0, maxval = 100, step = 1)
 circleColor = input.color(color.orange, title = 'Circle Color')
 circleOpacity = input.int(50, title = 'Circle Opacity %', minval = 0, maxval = 100, step = 10)
-circleOffset = input.float(0.5, title = 'Circle Offset Multiplier', minval = 0.1, maxval = 2.0, step = 0.1)
 
 // Recreate RVM calculation (same logic as main indicator)
 // Short-term ATRs
@@ -43,16 +42,8 @@ wilders_smooth(src, length) =>
 smoothRVM = wilders_smooth(normRVM, smoothingLength)
 RVM = smoothing ? smoothRVM : normRVM
 
-// Calculate position for circles below bars
-circlePosition = low - ta.atr(14) * circleOffset
-
 // Plot circles when RVM is below threshold
-plotshape(RVM < circleThreshold ? circlePosition : na, style = shape.circle, location = location.absolute, color = color.new(circleColor, circleOpacity), size = size.auto, title = 'RVM Alert Circle')
-
-// Optional: Add text label showing RVM value
-showValueLabel = input.bool(false, title = 'Show RVM Value at Circles')
-if showValueLabel and RVM < circleThreshold
-    label.new(bar_index, circlePosition - ta.atr(14) * 0.2, str.tostring(RVM, '#.#'), color = color.new(color.white, 100), textcolor = circleColor, style = label.style_none, size = size.tiny)
+plotshape(RVM < circleThreshold, style = shape.circle, location = location.belowbar, color = color.new(circleColor, circleOpacity), size = size.auto, title = 'RVM Alert Circle')
 
 // Alert condition
 alertcondition(RVM < circleThreshold, title = 'RVM Below Threshold', message = 'RVM: {{plot_0}} is below threshold {{threshold}}')
