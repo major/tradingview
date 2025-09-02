@@ -42,8 +42,12 @@ is_all_time_high = volume > all_time_high_volume and volume > 0
 // Check for volume at least X times the SMA
 is_sma_multiplier = volume >= volume_sma * volume_multiplier
 
+// Check if current bar is today and market is still open
+is_current_day = barstate.isrealtime and barstate.isconfirmed == false
+
 // Check for exceptionally low volume (50% of SMA or lower)
-is_low_volume = volume <= volume_sma * low_volume_threshold
+// Skip low volume check on current day if market is still open
+is_low_volume = not is_current_day and volume <= volume_sma * low_volume_threshold
 
 // Function to get the appropriate shape
 getShape(style) =>
@@ -65,9 +69,7 @@ show_low_volume = priority_mode ? is_low_volume and not is_sma_multiplier and no
 
 // Plot markers with tiny size
 plotshape(series = show_all_time, location = location.abovebar, style = selected_shape, size = size.auto, color = color_all_time, title = 'All-Time High Volume')
-
 plotshape(series = show_sma_mult, location = location.abovebar, style = selected_shape, size = size.auto, color = color_sma_mult, title = 'High Volume (SMA Multiple)')
-
 plotshape(series = show_low_volume, location = location.abovebar, style = selected_shape, size = size.auto, color = color_low_volume, title = 'Low Volume')
 
 // Add alerts
