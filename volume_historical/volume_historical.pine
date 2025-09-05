@@ -1,0 +1,49 @@
+// Copyright 2025 Major Hayden
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//@version=6
+indicator('Volume Historical Patterns', shorttitle = 'Vol Patterns', format = format.volume, overlay = false)
+
+// User inputs
+smaLength = input.int(20, 'SMA Length', minval = 1)
+highVolMultiplier = input.float(3.0, 'High Volume Multiplier', minval = 1.0, step = 0.1)
+lowVolPercentage = input.float(0.5, 'Low Volume Percentage', minval = 0.1, maxval = 1.0, step = 0.1)
+
+// Calculate volume SMA
+volumeSMA = ta.sma(volume, smaLength)
+
+// Track highest volume ever seen
+var float highestVolume = na
+highestVolume := na(highestVolume) ? volume : math.max(highestVolume, volume)
+
+// Determine bar color and special condition flags
+barColor = color.new(color.white, 0)
+isSpecialBar = false
+
+// Priority order for coloring (most important condition first)
+if volume == highestVolume
+    barColor := color.green // Highest volume ever
+    isSpecialBar := true
+    barColor
+else if volume >= volumeSMA * highVolMultiplier
+    barColor := color.yellow // High volume (configurable X times SMA)
+    isSpecialBar := true
+    barColor
+else if volume < volumeSMA * lowVolPercentage
+    barColor := color.red // Low volume (less than 50% of SMA)
+    isSpecialBar := true
+    barColor
+
+plot(volume, style = plot.style_columns, color = barColor, linewidth = 1, title = 'Volume')
+plot(volumeSMA, style = plot.style_columns, color = color.new(#161434, 15), linewidth = 1, title = 'Volume SMA')
