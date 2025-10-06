@@ -42,6 +42,11 @@ show_multiplier_labels = input.bool(false, title = 'Show Volume Multiplier Label
 label_color = input.color(color.yellow, title = 'Label Text Color')
 label_bg_color = input.color(color.new(color.black, 80), title = 'Label Background Color')
 
+// Current bar multiplier label settings
+show_current_multiplier = input.bool(false, title = 'Show Current Bar Multiplier (Real-Time)')
+current_label_color = input.color(color.white, title = 'Current Bar Label Text Color')
+current_label_bg_color = input.color(color.new(color.blue, 50), title = 'Current Bar Label Background Color')
+
 // Calculate volume SMA
 volume_sma = ta.sma(volume, sma_length)
 
@@ -95,8 +100,7 @@ plotshape(series = show_low_volume, location = location.abovebar, style = select
 
 // Add alerts
 alertcondition(is_all_time_high, title = 'All-Time High Volume', message = 'All-time high volume detected on {{ticker}}')
-alertcondition(is_sma_multiplier, title = 'High Volume Spike', message = 'High volume spike detected on {{ticker}} - volume is above SMA threshold')
-alertcondition(is_low_volume, title = 'Low Volume', message = 'Exceptionally low volume detected on {{ticker}} - volume is below 50% of SMA')
+alertcondition(show_sma_mult, title = 'High Volume Spike', message = 'High volume spike detected on {{ticker}} - volume is above SMA threshold')
 
 // Display current values in data window
 plot(volume, title = 'Current Volume', display = display.data_window)
@@ -106,3 +110,15 @@ plot(all_time_high_volume, title = 'All-Time High Volume', display = display.dat
 // Draw rectangles on high volume days (yellow circles)
 if show_rectangles and is_sma_multiplier
     box.new(bar_index, high, bar_index + rect_bars_extend, low, border_color = na, bgcolor = color.new(rect_color, rect_transparency))
+
+// Show real-time multiplier for current bar
+if show_current_multiplier and barstate.islast
+    current_multiplier = volume / volume_sma
+    current_text = str.tostring(current_multiplier, format.mintick) + "x"
+    var label current_label = na
+    label.delete(current_label)
+    current_label := label.new(bar_index, low, current_text,
+                              color = current_label_bg_color,
+                              textcolor = current_label_color,
+                              style = label.style_label_upper_left,
+                              size = size.normal)
