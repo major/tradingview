@@ -1,0 +1,269 @@
+//@version=6
+indicator('Taleb Fragility & Compression Detector', overlay = false, max_bars_back = 500)
+
+// ═══════════════════════════════════════════════════════════════
+// TALEB FRAGILITY & COMPRESSION DETECTOR
+// ═══════════════════════════════════════════════════════════════
+//
+// This indicator identifies market fragility and compression - periods where
+// volatility is suppressed and price action is constrained. These fragile states
+// often precede explosive moves in either direction.
+//
+// CORE CONCEPT (Inspired by Nassim Nicholas Taleb):
+// Fragility is the property of being harmed by disorder. In markets, when
+// volatility is artificially suppressed or naturally compressed, it creates a
+// fragile state that cannot persist. Like a coiled spring, the market tends to
+// expand violently after extreme compression.
+//
+// WHAT THIS INDICATOR DOES:
+// - Measures realized volatility and compares to historical levels
+// - Detects compression across multiple metrics (ATR, Bollinger Bands, Keltner)
+// - Identifies classic breakout patterns (NR7, inside days, triangles)
+// - Monitors momentum death (flat RSI, MACD, ADX)
+// - Combines all signals into a master Fragility Score (0-100+)
+//
+// WHAT THIS INDICATOR DOES NOT DO:
+// - Predict direction of breakout (up or down)
+// - Generate buy/sell signals
+// - Identify trend direction
+// - Work as a standalone trading system
+//
+// USAGE:
+// - Low scores (0-40): Normal market conditions
+// - High scores (60+): Fragile state, expect volatility expansion
+// - Extreme scores (80+): Maximum compression, breakout imminent
+//
+// Use this indicator to:
+// 1. Adjust position sizing (reduce size in fragile markets)
+// 2. Prepare for breakouts (set alerts, tighten stops)
+// 3. Identify low-volatility environments for options strategies
+// 4. Avoid entering positions during maximum compression
+//
+// ═══════════════════════════════════════════════════════════════
+
+// INPUTS - Timeframe selection
+useCustomTimeframe = input.bool(false, 'Use Custom Timeframe', group = 'Timeframe')
+customTimeframe = input.timeframe('W', 'Timeframe', group = 'Timeframe')
+
+// INPUTS - Display settings
+tableTextSize = input.string('Small', 'Info Table Text Size', options = ['Auto', 'Tiny', 'Small', 'Normal', 'Large', 'Huge'], group = 'Display')
+
+// INPUTS - Focused on compression and volatility
+rvLen = input.int(20, 'Realized Vol Period', minval = 10, group = 'Volatility')
+atrLen = input.int(10, 'ATR Period', minval = 5, group = 'Volatility')
+compressionLen = input.int(30, 'Compression Detection Period', group = 'Compression')
+bbLen = input.int(20, 'Bollinger Band Length', group = 'Compression')
+kcLen = input.int(20, 'Keltner Channel Length', group = 'Compression')
+kcMult = input.float(1.5, 'Keltner Multiplier', group = 'Compression')
+
+// Select the appropriate timeframe
+selectedTimeframe = useCustomTimeframe ? customTimeframe : timeframe.period
+
+// Convert table text size string to size constant
+getTextSize(sizeStr) =>
+    sizeStr == 'Auto' ? size.auto : sizeStr == 'Tiny' ? size.tiny : sizeStr == 'Small' ? size.small : sizeStr == 'Normal' ? size.normal : sizeStr == 'Large' ? size.large : size.huge
+
+textSize = getTextSize(tableTextSize)
+
+// ═══════════════════════════════════════════════════════════════
+// CALCULATION FUNCTION - Called in selected timeframe context
+// ═══════════════════════════════════════════════════════════════
+
+calculateFragility() =>
+    // ═══════════════════════════════════════════════════════════════
+    // SECTION 1: REALIZED VOLATILITY - THE GROUND TRUTH
+    // ═══════════════════════════════════════════════════════════════
+    // Calculate actual market volatility using log returns (more accurate than simple returns)
+    // Annualize it to get a percentage comparable across timeframes
+    logReturns = math.log(close / close[1])
+    realizedVol = ta.stdev(logReturns, rvLen) * math.sqrt(252) * 100
+
+    // Where does current volatility rank in the past year? (252 trading days)
+    // RV Percentile below 20% = volatility in bottom quintile = fragile
+    lookback = 252
+    rvHigh = ta.highest(realizedVol, lookback)
+    rvLow = ta.lowest(realizedVol, lookback)
+    rvPercentile = (realizedVol - rvLow) / (rvHigh - rvLow) * 100
+
+    // Volatility of volatility - Taleb's "second derivative of chaos"
+    // When vol is stable AND low, market is vulnerable to regime change
+    volOfVol = ta.stdev(realizedVol, 20)
+    vovHigh = ta.highest(volOfVol, lookback)
+    vovLow = ta.lowest(volOfVol, lookback)
+    vovPercentile = (volOfVol - vovLow) / (vovHigh - vovLow) * 100
+
+    // ═══════════════════════════════════════════════════════════════
+    // SECTION 2: COMPRESSION METRICS - PRESSURE BUILDING
+    // ═══════════════════════════════════════════════════════════════
+    // Pre-calculate common values to avoid redundant calculations
+    closeInv = 100.0 / close  // Inverse to convert divisions to multiplications
+
+    // ATR Compression: When daily range drops 30% below its 50-day average
+    // Markets can't stay "too quiet" indefinitely
+    atr = ta.atr(atrLen)
+    atrPercent = atr * closeInv
+    atrMA = ta.sma(atrPercent, 50)
+    atrCompression = atrPercent < atrMA * 0.7
+
+    // Bollinger Band Squeeze: Classic John Bollinger compression indicator
+    // When BB width is less than half its historical average, expect expansion
+    basis = ta.sma(close, bbLen)
+    bbDev = ta.stdev(close, bbLen) * 2
+    bbUpper = basis + bbDev
+    bbLower = basis - bbDev
+    bbWidth = (bbUpper - bbLower) / basis * 100
+    bbHistoricalWidth = ta.sma(bbWidth, 100)
+    bbSqueeze = bbWidth < bbHistoricalWidth * 0.5
+
+    // TTM Squeeze: Most powerful compression signal
+    // When Bollinger Bands squeeze inside Keltner Channels = extreme compression
+    kcBasis = ta.ema(close, kcLen)
+    // Reuse ATR if periods match, otherwise calculate
+    kcRange = (kcLen == atrLen ? atr : ta.atr(kcLen)) * kcMult
+    kcUpper = kcBasis + kcRange
+    kcLower = kcBasis - kcRange
+    ttmSqueeze = bbLower > kcLower and bbUpper < kcUpper
+
+    // Multi-timeframe range compression
+    // When ranges compress across multiple timeframes = systematic compression
+    rangeDaily = (high - low) * closeInv
+    highLow5 = ta.highest(high, 5) - ta.lowest(low, 5)
+    highLow20 = ta.highest(high, 20) - ta.lowest(low, 20)
+    range5Day = highLow5 * closeInv
+    range20Day = highLow20 * closeInv
+    rangeCompression = rangeDaily < ta.sma(rangeDaily, 30) * 0.6
+    multiCompression = range5Day < ta.sma(range5Day, 50) * 0.7 and range20Day < ta.sma(range20Day, 50) * 0.7
+
+    // ═══════════════════════════════════════════════════════════════
+    // SECTION 3: PATTERN RECOGNITION - SETUPS THAT EXPLODE
+    // ═══════════════════════════════════════════════════════════════
+    // Doji at trend extremes: Indecision after directional move = reversal or continuation setup
+    isDoji = math.abs(close - open) < (high - low) * 0.1
+    sma50 = ta.sma(close, 50)  // Cache SMA for reuse
+    trendUp = close > sma50 and close[1] > close[2]
+    trendDown = close < sma50 and close[1] < close[2]
+    dojiReversal = isDoji and (trendUp or trendDown)
+
+    // Inside days: Price action contained within previous bar = coiling
+    // Multiple inside days = extreme coiling, big move coming
+    insideDay = high < high[1] and low > low[1]
+    multipleInsideDays = insideDay and insideDay[1]
+
+    // NR7/NR4: Narrowest Range patterns (Linda Raschke)
+    // NR7 = current bar has smallest range in 7 bars = highest compression
+    // NR4 = same but 4 bars = moderate compression
+    nr7 = rangeDaily == ta.lowest(rangeDaily, 7)
+    nr4 = rangeDaily == ta.lowest(rangeDaily, 4)
+
+    // Triangle formation: Converging highs and lows = apex breakout setup
+    highs = ta.pivothigh(high, 5, 5)
+    lows = ta.pivotlow(low, 5, 5)
+    highsSlope = ta.change(highs, 10) / 10
+    lowsSlope = ta.change(lows, 10) / 10
+    triangleForming = highsSlope < 0 and lowsSlope > 0
+
+    // ═══════════════════════════════════════════════════════════════
+    // SECTION 4: MOMENTUM DEATH - WHEN MOVEMENT STOPS
+    // ═══════════════════════════════════════════════════════════════
+    // RSI stuck in dead center (45-55) and not moving = no momentum
+    // Like a car engine idling - eventually has to shift gears
+    rsi = ta.rsi(close, 14)
+    rsiCompressed = rsi > 45 and rsi < 55
+    rsiFlat = math.abs(rsi - rsi[5]) < 5
+
+    // MACD convergence: When MACD and signal line merge = momentum pause
+    // Often precedes momentum resurrection in either direction
+    [macdLine, signalLine, _] = ta.macd(close, 12, 26, 9)
+    macdFlat = math.abs(macdLine - signalLine) < atr * 0.1
+
+    // ADX below 20 with balanced +DI/-DI = no trend, no momentum
+    // Market in equilibrium, coiling for next directional move
+    adxLen = 14
+    [diPlus, diMinus, adx] = ta.dmi(adxLen, adxLen)
+    noTrend = adx < 20 and math.abs(diPlus - diMinus) < 5
+
+    // ═══════════════════════════════════════════════════════════════
+    // SECTION 5: FRAGILITY SCORE - THE MASTER FORMULA
+    // ═══════════════════════════════════════════════════════════════
+    // Combine all compression metrics (max 70 points)
+    // Using direct calculation instead of incremental assignment for better performance
+    compressionScore = (bbSqueeze ? 15 : 0) + (ttmSqueeze ? 20 : 0) + (atrCompression ? 10 : 0) + (rangeCompression ? 10 : 0) + (multiCompression ? 15 : 0)
+
+    // Pattern recognition score (max 50 points)
+    patternScore = (nr7 ? 15 : nr4 ? 10 : 0) + (multipleInsideDays ? 15 : insideDay ? 8 : 0) + (dojiReversal ? 10 : 0) + (triangleForming ? 12 : 0)
+
+    // Volatility regime score (max 35 points)
+    volScore = (rvPercentile < 20 ? 20 : rvPercentile < 40 ? 10 : 0) + (vovPercentile < 20 ? 15 : 0)
+
+    // Momentum death score (max 35 points)
+    momentumScore = (rsiCompressed and rsiFlat ? 15 : 0) + (macdFlat ? 10 : 0) + (noTrend ? 10 : 0)
+
+    // Calculate master fragility score (base max = 190)
+    // Add bonus multiplier: When multiple categories align, fragility is extreme
+    multiSignal = compressionScore > 20 and patternScore > 10 and volScore > 10
+    fragScore = compressionScore + patternScore + volScore + momentumScore + (multiSignal ? 20 : 0)
+
+    // Return all values needed for visualization and table display
+    [fragScore, rvPercentile, atrPercent, bbWidth, ttmSqueeze, nr7, nr4, multipleInsideDays, insideDay, dojiReversal, atrCompression, bbSqueeze]
+
+// Get all calculated values from the selected timeframe
+[fragScore, rvPercentile, atrPercent, bbWidth, ttmSqueeze, nr7, nr4, multipleInsideDays, insideDay, dojiReversal, atrCompression, bbSqueeze] = request.security(syminfo.tickerid, selectedTimeframe, calculateFragility(), lookahead = barmerge.lookahead_off)
+
+// ═══════════════════════════════════════════════════════════════
+// SECTION 6: VISUALIZATION - SEE THE PRESSURE
+// ═══════════════════════════════════════════════════════════════
+
+// Dynamic color based on score
+scoreColor = fragScore > 80 ? color.rgb(255, 0, 0) : fragScore > 60 ? color.rgb(255, 128, 0) : fragScore > 40 ? color.rgb(255, 255, 0) : fragScore > 20 ? color.rgb(128, 255, 128) : color.gray
+
+// Plot the master score
+hline(80, 'MAXIMUM FRAGILITY', color = color.red, linestyle = hline.style_dashed)
+hline(60, 'HIGH FRAGILITY', color = color.orange, linestyle = hline.style_dashed)
+hline(40, 'MODERATE FRAGILITY', color = color.yellow, linestyle = hline.style_dashed)
+hline(20, 'LOW FRAGILITY', color = color.green, linestyle = hline.style_dashed)
+hline(0, 'ZERO', color = color.gray, linestyle = hline.style_solid)
+
+plot(fragScore, 'Fragility Score', color = scoreColor, style = plot.style_columns)
+
+// Compression indicators (drawn in order of importance - last is on top)
+plotshape(multipleInsideDays, 'Multiple Inside Days', shape.square, location.bottom, color = color.orange, size = size.tiny)
+plotshape(nr7, 'NR7 (Narrowest Range 7 Bars)', shape.triangleup, location.bottom, color = color.blue, size = size.tiny)
+plotshape(ttmSqueeze, 'TTM Squeeze', shape.diamond, location.bottom, color = color.purple, size = size.tiny)
+
+// ═══════════════════════════════════════════════════════════════
+// SECTION 7: ALERTS - NOTIFY WHEN PRESSURE PEAKS
+// ═══════════════════════════════════════════════════════════════
+
+alertcondition(fragScore > 80, 'EXTREME FRAGILITY', 'Maximum pressure on {{ticker}}! Score: {{plot_0}}')
+alertcondition(fragScore > 60 and fragScore[1] <= 60, 'HIGH FRAGILITY TRIGGERED', 'High fragility on {{ticker}}! Score: {{plot_0}}')
+alertcondition(ttmSqueeze and not ttmSqueeze[1], 'TTM SQUEEZE FIRED', 'TTM Squeeze started on {{ticker}}!')
+alertcondition(nr7, 'NR7 PATTERN', 'Narrowest range in 7 days on {{ticker}}!')
+
+// ═══════════════════════════════════════════════════════════════
+// SECTION 8: INFO TABLE - COMPRESSION METRICS
+// ═══════════════════════════════════════════════════════════════
+
+var table infoTable = table.new(position.top_right, 2, 9, bgcolor = color.black, border_color = color.white, border_width = 1)
+
+if barstate.islast
+    table.cell(infoTable, 0, 0, 'FRAGILITY METRICS', bgcolor = color.gray, text_color = color.white, text_size = textSize)
+    table.cell(infoTable, 1, 0, 'STATUS', bgcolor = color.gray, text_color = color.white, text_size = textSize)
+    table.cell(infoTable, 0, 1, 'Total Score', text_color = color.white, text_size = textSize)
+    table.cell(infoTable, 1, 1, str.tostring(fragScore, '##.#'), text_color = scoreColor, text_size = textSize)
+    table.cell(infoTable, 0, 2, 'RV Percentile', text_color = color.white, text_size = textSize)
+    table.cell(infoTable, 1, 2, str.tostring(rvPercentile, '##') + '%', text_color = rvPercentile < 30 ? color.green : color.white, text_size = textSize)
+    table.cell(infoTable, 0, 3, 'ATR %', text_color = color.white, text_size = textSize)
+    table.cell(infoTable, 1, 3, str.tostring(atrPercent, '#.##') + '%', text_color = atrCompression ? color.yellow : color.white, text_size = textSize)
+    table.cell(infoTable, 0, 4, 'BB Width', text_color = color.white, text_size = textSize)
+    table.cell(infoTable, 1, 4, str.tostring(bbWidth, '#.#') + '%', text_color = bbSqueeze ? color.orange : color.white, text_size = textSize)
+    table.cell(infoTable, 0, 5, 'TTM Squeeze', text_color = color.white, text_size = textSize)
+    table.cell(infoTable, 1, 5, ttmSqueeze ? '🔥 ACTIVE' : 'No', text_color = ttmSqueeze ? color.red : color.gray, text_size = textSize)
+    table.cell(infoTable, 0, 6, 'Range Status', text_color = color.white, text_size = textSize)
+    rangeStatus = nr7 ? 'NR7!' : nr4 ? 'NR4' : 'Normal'
+    table.cell(infoTable, 1, 6, rangeStatus, text_color = nr7 ? color.yellow : color.white, text_size = textSize)
+    table.cell(infoTable, 0, 7, 'Pattern', text_color = color.white, text_size = textSize)
+    patternStatus = multipleInsideDays ? 'Multi-Inside' : insideDay ? 'Inside Day' : dojiReversal ? 'Doji' : 'None'
+    table.cell(infoTable, 1, 7, patternStatus, text_color = patternStatus != 'None' ? color.rgb(0, 255, 255) : color.gray, text_size = textSize)
+    table.cell(infoTable, 0, 8, 'Signal', text_color = color.white, text_size = textSize)
+    signalText = fragScore > 80 ? '🚨 EXTREME!' : fragScore > 60 ? '⚠️ HIGH' : fragScore > 40 ? 'MODERATE' : fragScore > 20 ? 'Low' : 'Wait'
+    table.cell(infoTable, 1, 8, signalText, text_color = fragScore > 60 ? color.red : color.white, text_size = textSize)
