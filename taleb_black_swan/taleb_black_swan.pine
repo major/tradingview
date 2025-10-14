@@ -83,14 +83,18 @@ calculateFragility() =>
     lookback = 252
     rvHigh = ta.highest(realizedVol, lookback)
     rvLow = ta.lowest(realizedVol, lookback)
-    rvPercentile = (realizedVol - rvLow) / (rvHigh - rvLow) * 100
+    rvRange = math.max(rvHigh - rvLow, 1e-6)
+    rvPercentileRaw = (realizedVol - rvLow) / rvRange * 100
+    rvPercentile = math.max(math.min(rvPercentileRaw, 100), 0)
 
     // Volatility of volatility - Taleb's "second derivative of chaos"
     // When vol is stable AND low, market is vulnerable to regime change
     volOfVol = ta.stdev(realizedVol, 20)
     vovHigh = ta.highest(volOfVol, lookback)
     vovLow = ta.lowest(volOfVol, lookback)
-    vovPercentile = (volOfVol - vovLow) / (vovHigh - vovLow) * 100
+    vovRange = math.max(vovHigh - vovLow, 1e-6)
+    vovPercentileRaw = (volOfVol - vovLow) / vovRange * 100
+    vovPercentile = math.max(math.min(vovPercentileRaw, 100), 0)
 
     // ═══════════════════════════════════════════════════════════════
     // SECTION 2: COMPRESSION METRICS - PRESSURE BUILDING
@@ -156,11 +160,15 @@ calculateFragility() =>
     nr4 = rangeDaily == ta.lowest(rangeDaily, 4)
 
     // Triangle formation: Converging highs and lows = apex breakout setup
-    highs = ta.pivothigh(high, 5, 5)
-    lows = ta.pivotlow(low, 5, 5)
-    highsSlope = ta.change(highs, 10) / 10
-    lowsSlope = ta.change(lows, 10) / 10
-    triangleForming = highsSlope < 0 and lowsSlope > 0
+    pivotHigh = ta.pivothigh(high, 5, 5)
+    pivotLow = ta.pivotlow(low, 5, 5)
+    latestHigh = ta.valuewhen(not na(pivotHigh), pivotHigh, 0)
+    priorHigh = ta.valuewhen(not na(pivotHigh), pivotHigh, 1)
+    latestLow = ta.valuewhen(not na(pivotLow), pivotLow, 0)
+    priorLow = ta.valuewhen(not na(pivotLow), pivotLow, 1)
+    contractingHighs = not na(latestHigh) and not na(priorHigh) and latestHigh < priorHigh
+    risingLows = not na(latestLow) and not na(priorLow) and latestLow > priorLow
+    triangleForming = contractingHighs and risingLows
 
     // ═══════════════════════════════════════════════════════════════
     // SECTION 4: MOMENTUM DEATH - WHEN MOVEMENT STOPS
