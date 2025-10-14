@@ -73,15 +73,43 @@ When momentum indicators show the market is "stuck":
 
 ## The Fragility Score
 
-The indicator combines all metrics into a master **Fragility Score**:
+The indicator combines all metrics into a master **Fragility Score** with the following point allocations:
+
+### Score Components (Base Maximum: 190 points)
+
+1. **Compression Score** (max 70 points):
+   - Bollinger Band Squeeze: 15 points
+   - TTM Squeeze: 20 points
+   - ATR Compression: 10 points
+   - Range Compression: 10 points
+   - Multi-timeframe Compression: 15 points
+
+2. **Pattern Score** (max 50 points):
+   - NR7 Pattern: 15 points (or NR4: 10 points)
+   - Multiple Inside Days: 15 points (or single Inside Day: 8 points)
+   - Doji Reversal: 10 points
+   - Triangle Formation: 12 points
+
+3. **Volatility Score** (max 35 points):
+   - RV Percentile < 20%: 20 points (or < 40%: 10 points)
+   - Volatility-of-Volatility < 20%: 15 points
+
+4. **Momentum Score** (max 35 points):
+   - RSI Compressed and Flat: 15 points
+   - MACD Flat: 10 points
+   - No Trend (ADX): 10 points
+
+5. **Bonus Multiplier** (+20 points):
+   - Added when compression score > 20 AND pattern score > 10 AND volatility score > 10
+   - This represents extreme alignment across multiple fragility dimensions
+
+### Interpretation Levels
 
 - **0-20**: Low fragility - Normal market conditions
 - **20-40**: Moderate fragility - Some compression present
 - **40-60**: High fragility - Multiple compression signals
 - **60-80**: Very high fragility - Strong compression across metrics
 - **80+**: Extreme fragility - Maximum compression, breakout imminent
-
-A **bonus multiplier** (+20 points) is added when compression, patterns, and low volatility all align simultaneously.
 
 ## Visual Elements
 
@@ -173,6 +201,13 @@ This indicator works best when combined with:
 
 ## Settings
 
+### Timeframe Group
+- **Use Custom Timeframe** (default: false): Enable to analyze fragility on a different timeframe
+- **Timeframe** (default: Weekly): Select custom timeframe when enabled
+
+### Display Group
+- **Info Table Text Size** (default: Small): Adjust the size of the metrics table (Auto, Tiny, Small, Normal, Large, Huge)
+
 ### Volatility Group
 - **Realized Vol Period** (default: 20): Lookback for volatility calculation
 - **ATR Period** (default: 10): Lookback for Average True Range
@@ -224,10 +259,48 @@ This indicator helps you identify when the market is in a state where small inpu
 
 To deepen your understanding of the concepts behind this indicator:
 
+### Books
 - **Antifragile** by Nassim Nicholas Taleb - Core concepts of fragility and how systems respond to stress
 - **The Black Swan** by Nassim Nicholas Taleb - Understanding rare events and market randomness
 - **Dynamic Trading** by Robert Miner - Technical analysis of compression patterns
 - **Bollinger on Bollinger Bands** by John Bollinger - Deep dive into the squeeze concept
+
+### Online Resources
+
+#### Taleb's Concepts
+- [Nassim Taleb's Homepage](https://www.fooledbyrandomness.com/) - Official site with papers and articles
+- [Antifragility explained (Medium Fooled By Randomness)](https://medium.com/incerto) - Taleb's Medium publication
+- [Black Swan Theory (Wikipedia)](https://en.wikipedia.org/wiki/Black_swan_theory) - Overview of Black Swan events
+- [Fat Tails and Volatility (Quantpedia)](https://quantpedia.com/fat-tails-in-financial-markets/) - Understanding extreme events in markets
+
+#### Volatility Metrics
+- [Realized Volatility Explained (Investopedia)](https://www.investopedia.com/terms/r/realizedvolatility.asp) - What realized volatility measures
+- [Volatility Percentiles (tastytrade)](https://www.tastytrade.com/definitions/implied-volatility-percentile) - Using volatility percentiles for trading
+- [Log Returns vs Simple Returns](https://quantivity.wordpress.com/2011/02/21/why-log-returns/) - Why log returns are preferred
+- [Volatility of Volatility (VIX and More)](http://vixandmore.blogspot.com/search/label/volatility%20of%20volatility) - Second-order volatility effects
+
+#### Compression Patterns
+- [Bollinger Band Squeeze (BollingerBands.com)](https://www.bollingerbands.com/bollinger-band-squeeze) - John Bollinger's official explanation
+- [TTM Squeeze Indicator Explained (TradingView)](https://www.tradingview.com/script/nqQ1DT5a-Squeeze-Momentum-Indicator-LazyBear/) - Popular TTM Squeeze implementation
+- [Understanding the Squeeze (Simpler Trading)](https://www.simplertrading.com/blog/what-is-the-squeeze) - Practical guide to squeeze trading
+- [Keltner Channels vs Bollinger Bands](https://www.investopedia.com/articles/trading/08/keltner-channel-bollinger-band.asp) - Understanding the TTM Squeeze components
+
+#### Classic Patterns
+- [NR7 Pattern (The Strat Trading)](https://www.investopedia.com/terms/n/narrowestrange.asp) - Narrowest Range patterns explained
+- [Inside Day Pattern (Investopedia)](https://www.investopedia.com/terms/i/inside_day.asp) - Inside bar trading strategy
+- [Triangle Patterns (StockCharts)](https://school.stockcharts.com/doku.php?id=chart_analysis:chart_patterns:triangle_patterns) - Symmetrical, ascending, and descending triangles
+- [Doji Candlesticks (BabyPips)](https://www.babypips.com/learn/forex/doji) - Understanding indecision candles
+
+#### Technical Indicators
+- [ATR Indicator Guide (Investopedia)](https://www.investopedia.com/terms/a/atr.asp) - Average True Range explained
+- [RSI Indicator (TradingView)](https://www.tradingview.com/support/solutions/43000502338-relative-strength-index-rsi/) - Relative Strength Index
+- [MACD Indicator (Investopedia)](https://www.investopedia.com/terms/m/macd.asp) - Moving Average Convergence Divergence
+- [ADX Indicator (BabyPips)](https://www.babypips.com/learn/forex/average-directional-index) - Average Directional Index and trend strength
+
+#### Academic Papers
+- [SSRN - Volatility Clustering](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2435323) - Why volatility regimes persist
+- [Volatility Forecasting (NYU Stern)](https://pages.stern.nyu.edu/~adamodar/pdfiles/papers/volatility.pdf) - Understanding volatility dynamics
+- [Market Compression and Breakouts (Journal of Finance)](https://onlinelibrary.wiley.com/journal/15406261) - Academic research on range compression
 
 ## License
 
