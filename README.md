@@ -4,13 +4,26 @@ Enjoy this collection of open source Pine Script indicators for TradingView.
 
 ## Indicators 🎯
 
-| Indicator | Description |
-|-----------|-------------|
-| [🎯 HVC Finder](hvc_finder.pinescript) | High Volume Close (HVC) Finder - identifies bars with volume significantly above MA |
-| [🔮 Relative Strength Leadership](relative_strength_leadership/) | Compare relative strength vs SPY (or any symbol) with fast/slow MA crossovers |
-| [🌪️ Taleb Fragility Detector](taleb_black_swan/) | Detect market fragility & compression periods that precede explosive moves |
-| [📢 Unusual Volume Markers](unusual_volume/) | Find high, low, and unusual volume patterns |
-| [📈 Volume Historical](volume_historical/) | Highlight highest, lowest, and above average volume with SMA overlay |
-| [⏰ Volume Filter Percentage](volume_filter_percentage/) | Filter and analyze volume by specific time periods (NYC timezone) |
-| [📍 Volume Filter Markers](volume_filter_percentage/volume_filter_percentage_overlay.pine) | Overlay markers for filtered volume patterns on price charts |
-| [⚖️ Volume Ratio](volume_ratio/) | Compare volume ratio between ticker and SPY (or any symbol) |
+### 👀 [HVC Watcher](hvc_watcher/)
+
+Watches for High Volume Close patterns and tracks unusual volume activity with optional time filtering in NYC timezone. This enhanced version of the HVC Finder provides more flexible monitoring capabilities and time-based filtering for intraday analysis.
+
+### 🔮 [Relative Strength Leadership](relative_strength_leadership/)
+
+Compares relative strength versus a benchmark symbol (default SPY) with fast and slow moving average crossovers. This indicator helps identify when a ticker is outperforming or underperforming the benchmark, revealing leadership and strength trends in the market.
+
+### 🌪️ [Market Fragility & Compression Detector](market_fragility/)
+
+Detects market fragility, compression periods, and low volatility environments that often precede explosive moves. This indicator highlights conditions where markets may be vulnerable to sudden large movements by analyzing volatility regimes, compression patterns, and momentum indicators.
+
+### 📈 [Volume Historical](volume_historical/)
+
+Highlights highest, lowest, and above-average volume bars with an SMA overlay for context. This straightforward volume analysis tool makes it easy to spot volume extremes and compare current volume to historical averages at a glance.
+
+### ⏰ [Volume Filter Percentage](volume_filter_percentage/)
+
+Analyzes and filters volume by specific time periods in NYC timezone, showing what percentage of volume occurs during your chosen time window. Includes an [overlay version](volume_filter_percentage/volume_filter_percentage_overlay.pine) that adds visual markers directly on price charts for filtered volume patterns.
+
+### ⚖️ [Volume Ratio](volume_ratio/)
+
+Compares the volume ratio between your ticker and a benchmark symbol (default SPY). This relative volume analysis helps identify when a specific stock is experiencing unusual volume activity compared to the broader market.

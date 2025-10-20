@@ -18,7 +18,7 @@ The repository contains standalone Pine Script indicators organized in folders:
 - **hvc_finder.pinescript** - High Volume Close Finder: Identifies bars with volume significantly above MA and marks closes
 - **hvc_watcher/** - HVC Watcher: Watches for High Volume Close patterns and unusual volume with optional time filtering (NYC timezone)
 - **relative_strength_leadership/** - Relative Strength Leadership: Compares relative strength vs benchmark with fast/slow MA crossovers
-- **taleb_black_swan/** - Taleb Fragility & Compression Detector: Detects market fragility, compression, and low volatility periods
+- **market_fragility/** - Market Fragility & Compression Detector: Detects market fragility, compression, and low volatility periods
 - **volume_historical/** - Volume Historical: Highlights highest, lowest, and above average volume with SMA overlay
 - **volume_filter_percentage/** - Filtered Volume Percentage: Analyzes volume filtered by specific time periods (NYC timezone)
   - Includes overlay version (`volume_filter_percentage_overlay.pine`) for chart markers

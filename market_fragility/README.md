@@ -1,14 +1,14 @@
-# Taleb Fragility & Compression Detector
+# Market Fragility & Compression Detector
 
-A Pine Script indicator inspired by Nassim Nicholas Taleb's concepts of fragility, antifragility, and market dynamics. This indicator identifies periods of market compression and fragility that may precede significant price movements.
+A Pine Script indicator that identifies periods of market compression and fragility that may precede significant price movements.
 
 ## Overview
 
 This indicator detects when markets are in a "fragile" state - compressed, quiet periods where volatility is suppressed and price action is constrained. Like a spring being compressed, these periods often precede explosive moves in either direction. The indicator doesn't predict direction, but rather identifies when the market is "loaded" and ready to move.
 
-## Taleb's Core Concepts
+## Core Concepts
 
-### Fragility vs. Antifragility
+### Market Fragility
 
 **Fragility** is the property of being harmed by disorder, volatility, and stress. In markets, a fragile state occurs when:
 - Volatility is abnormally low
@@ -18,17 +18,13 @@ This indicator detects when markets are in a "fragile" state - compressed, quiet
 
 This suppressed volatility is unsustainable. Markets are dynamic systems that naturally exhibit volatility - when it's artificially suppressed or naturally compressed, it tends to explode back violently.
 
-### Black Swan Events
-
-Taleb's famous "Black Swan" concept refers to highly improbable events that have massive impact. While this indicator doesn't predict Black Swans specifically, it identifies conditions where markets are fragile and susceptible to large, sudden moves - the type of environment where unexpected events can have outsized effects.
-
 ### Volatility Regimes
 
 Markets cycle between high and low volatility regimes. When realized volatility drops to historical lows (bottom 20-30% of its range), the market is statistically due for a regime change. This indicator quantifies where current volatility sits in its historical distribution.
 
 ## What This Indicator Measures
 
-The indicator combines multiple compression and fragility metrics into a single score (0-100+):
+The indicator combines multiple compression and fragility metrics into a single score (0-100):
 
 ### 1. Realized Volatility (20%)
 
@@ -75,7 +71,7 @@ When momentum indicators show the market is "stuck":
 
 The indicator combines all metrics into a master **Fragility Score** with the following point allocations:
 
-### Score Components (Base Maximum: 190 points)
+### Score Components (Normalized to 0-100)
 
 1. **Compression Score** (max 70 points):
    - Bollinger Band Squeeze: 15 points
@@ -109,7 +105,7 @@ The indicator combines all metrics into a master **Fragility Score** with the fo
 - **20-40**: Moderate fragility - Some compression present
 - **40-60**: High fragility - Multiple compression signals
 - **60-80**: Very high fragility - Strong compression across metrics
-- **80+**: Extreme fragility - Maximum compression, breakout imminent
+- **80-100**: Extreme fragility - Maximum compression, breakout imminent
 
 ## Visual Elements
 
@@ -120,7 +116,7 @@ The fragility score is plotted as columns with dynamic colors:
 - **Light Green**: Low-moderate (20-40)
 - **Yellow**: Moderate (40-60)
 - **Orange**: High (60-80)
-- **Red**: Extreme (80+)
+- **Red**: Extreme (80-100)
 
 ### Reference Lines
 
@@ -189,7 +185,7 @@ Four alert conditions are included:
 **Risk Management**: Use as a regime filter:
 - Low scores (0-40): Normal position sizing
 - High scores (60+): Reduce size or stay defensive
-- Extreme scores (80+): Highest risk of volatility expansion
+- Extreme scores (80-100): Highest risk of volatility expansion
 
 ### Combining With Other Analysis
 
@@ -246,7 +242,7 @@ When you see purple diamonds (TTM Squeeze) + blue triangles (NR7) + score above 
 
 ## Philosophy: Why This Matters
 
-Traditional technical analysis often focuses on predicting direction. This indicator takes a different approach inspired by Taleb's work:
+Traditional technical analysis often focuses on predicting direction. This indicator takes a different approach:
 
 1. **Acknowledge Uncertainty**: We can't reliably predict direction, but we can identify fragile states
 2. **Focus on Risk**: High fragility = high risk of volatility expansion
@@ -259,45 +255,31 @@ This indicator helps you identify when the market is in a state where small inpu
 
 To deepen your understanding of the concepts behind this indicator:
 
-### Books
-- **Antifragile** by Nassim Nicholas Taleb - Core concepts of fragility and how systems respond to stress
-- **The Black Swan** by Nassim Nicholas Taleb - Understanding rare events and market randomness
-- **Dynamic Trading** by Robert Miner - Technical analysis of compression patterns
-- **Bollinger on Bollinger Bands** by John Bollinger - Deep dive into the squeeze concept
-
-### Online Resources
-
-#### Taleb's Concepts
-- [Nassim Taleb's Homepage](https://www.fooledbyrandomness.com/) - Official site with papers and articles
-- [Antifragility explained (Medium Fooled By Randomness)](https://medium.com/incerto) - Taleb's Medium publication
-- [Black Swan Theory (Wikipedia)](https://en.wikipedia.org/wiki/Black_swan_theory) - Overview of Black Swan events
-- [Fat Tails and Volatility (Quantpedia)](https://quantpedia.com/fat-tails-in-financial-markets/) - Understanding extreme events in markets
-
-#### Volatility Metrics
+### Volatility Metrics
 - [Realized Volatility Explained (Investopedia)](https://www.investopedia.com/terms/r/realizedvolatility.asp) - What realized volatility measures
 - [Volatility Percentiles (tastytrade)](https://www.tastytrade.com/definitions/implied-volatility-percentile) - Using volatility percentiles for trading
 - [Log Returns vs Simple Returns](https://quantivity.wordpress.com/2011/02/21/why-log-returns/) - Why log returns are preferred
 - [Volatility of Volatility (VIX and More)](http://vixandmore.blogspot.com/search/label/volatility%20of%20volatility) - Second-order volatility effects
 
-#### Compression Patterns
+### Compression Patterns
 - [Bollinger Band Squeeze (BollingerBands.com)](https://www.bollingerbands.com/bollinger-band-squeeze) - John Bollinger's official explanation
 - [TTM Squeeze Indicator Explained (TradingView)](https://www.tradingview.com/script/nqQ1DT5a-Squeeze-Momentum-Indicator-LazyBear/) - Popular TTM Squeeze implementation
 - [Understanding the Squeeze (Simpler Trading)](https://www.simplertrading.com/blog/what-is-the-squeeze) - Practical guide to squeeze trading
 - [Keltner Channels vs Bollinger Bands](https://www.investopedia.com/articles/trading/08/keltner-channel-bollinger-band.asp) - Understanding the TTM Squeeze components
 
-#### Classic Patterns
+### Classic Patterns
 - [NR7 Pattern (The Strat Trading)](https://www.investopedia.com/terms/n/narrowestrange.asp) - Narrowest Range patterns explained
 - [Inside Day Pattern (Investopedia)](https://www.investopedia.com/terms/i/inside_day.asp) - Inside bar trading strategy
 - [Triangle Patterns (StockCharts)](https://school.stockcharts.com/doku.php?id=chart_analysis:chart_patterns:triangle_patterns) - Symmetrical, ascending, and descending triangles
 - [Doji Candlesticks (BabyPips)](https://www.babypips.com/learn/forex/doji) - Understanding indecision candles
 
-#### Technical Indicators
+### Technical Indicators
 - [ATR Indicator Guide (Investopedia)](https://www.investopedia.com/terms/a/atr.asp) - Average True Range explained
 - [RSI Indicator (TradingView)](https://www.tradingview.com/support/solutions/43000502338-relative-strength-index-rsi/) - Relative Strength Index
 - [MACD Indicator (Investopedia)](https://www.investopedia.com/terms/m/macd.asp) - Moving Average Convergence Divergence
 - [ADX Indicator (BabyPips)](https://www.babypips.com/learn/forex/average-directional-index) - Average Directional Index and trend strength
 
-#### Academic Papers
+### Academic Papers
 - [SSRN - Volatility Clustering](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2435323) - Why volatility regimes persist
 - [Volatility Forecasting (NYU Stern)](https://pages.stern.nyu.edu/~adamodar/pdfiles/papers/volatility.pdf) - Understanding volatility dynamics
 - [Market Compression and Breakouts (Journal of Finance)](https://onlinelibrary.wiley.com/journal/15406261) - Academic research on range compression
@@ -308,4 +290,4 @@ Apache License 2.0
 
 ## Version
 
-1.0 - Initial release
+1.1 - Updated naming and normalized score to 0-100 scale
