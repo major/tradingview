@@ -1,0 +1,82 @@
+// Copyright 2025 Major Hayden
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//@version=6
+indicator('Filtered Volume Markers', shorttitle = 'Vol Markers', overlay = true, dynamic_requests = true)
+
+// Time filtering inputs (must match main indicator settings)
+startHour = input.int(10, 'Start Hour', minval = 0, maxval = 23, group = 'Volume Filtering Hours (NYC Time)', tooltip = 'Only volume within these hours will be included in the filtered percentage calculation')
+startMinute = input.int(30, 'Start Minute', minval = 0, maxval = 59, group = 'Volume Filtering Hours (NYC Time)')
+endHour = input.int(15, 'End Hour', minval = 0, maxval = 23, group = 'Volume Filtering Hours (NYC Time)')
+endMinute = input.int(00, 'End Minute', minval = 0, maxval = 59, group = 'Volume Filtering Hours (NYC Time)')
+
+// Color zone thresholds (must match main indicator)
+lowThreshold = input.float(30.0, 'Low Threshold (%)', minval = 0.0, maxval = 100.0, tooltip = 'Percentage below this will be colored red')
+highThreshold = input.float(70.0, 'High Threshold (%)', minval = 0.0, maxval = 100.0, tooltip = 'Percentage above this will be colored green')
+
+// Marker settings
+showGreenMarkers = input.bool(true, 'Show Green Markers', tooltip = 'Show markers when filtered volume > high threshold')
+showRedMarkers = input.bool(true, 'Show Red Markers', tooltip = 'Show markers when filtered volume < low threshold')
+
+// Function to check if a time is within trading hours (NYC time)
+isTimeInRange(t) =>
+    barHour = hour(t, 'America/New_York')
+    barMinute = minute(t, 'America/New_York')
+
+    // Convert times to minutes for easier comparison
+    barTimeInMinutes = barHour * 60 + barMinute
+    startTimeInMinutes = startHour * 60 + startMinute
+    endTimeInMinutes = endHour * 60 + endMinute
+
+    // Check if bar is within the time range
+    barTimeInMinutes >= startTimeInMinutes and barTimeInMinutes <= endTimeInMinutes
+
+// Calculate filtered and unfiltered volume based on timeframe
+filteredVolume = 0.0
+unfilteredVolume = 0.0
+
+if timeframe.isintraday
+    // For intraday charts, just check the current bar's time (no lower TF lookup needed)
+    nycTime = time('', 'America/New_York')
+    filteredVolume := isTimeInRange(nycTime) ? volume : 0
+    unfilteredVolume := volume
+else
+    // For daily or higher timeframes, fetch lower timeframe data (30-min bars for performance)
+    volArray = request.security_lower_tf(syminfo.tickerid, '30', volume)
+    timeArray = request.security_lower_tf(syminfo.tickerid, '30', time)
+
+    float sessionVol = 0.0
+    float totalVol = 0.0
+
+    if array.size(volArray) > 0
+        for i = 0 to array.size(volArray) - 1
+            barVol = array.get(volArray, i)
+            barTime = array.get(timeArray, i)
+            totalVol += barVol
+            if isTimeInRange(barTime)
+                sessionVol += barVol
+
+    filteredVolume := sessionVol
+    unfilteredVolume := totalVol
+
+// Calculate percentage (handle division by zero)
+volumePercentage = unfilteredVolume > 0 ? filteredVolume / unfilteredVolume * 100 : 0.0
+
+// Determine conditions for markers
+isGreen = volumePercentage > highThreshold
+isRed = volumePercentage < lowThreshold
+
+// Plot markers below the bar
+plotshape(showGreenMarkers and isGreen, title = 'High Quality Volume', style = shape.circle, location = location.belowbar, color = color.green, size = size.auto)
+plotshape(showRedMarkers and isRed, title = 'Low Quality Volume', style = shape.circle, location = location.belowbar, color = color.red, size = size.auto)

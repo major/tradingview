@@ -1,0 +1,117 @@
+// Copyright 2025 Major Hayden
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//@version=6
+indicator('Filtered Volume Percentage', shorttitle = 'Filtered Vol %', format = format.percent, overlay = false, dynamic_requests = true)
+
+// Time filtering inputs
+startHour = input.int(10, 'Start Hour', minval = 0, maxval = 23, group = 'Volume Filtering Hours (NYC Time)', tooltip = 'Only volume within these hours will be included in the filtered percentage calculation')
+startMinute = input.int(30, 'Start Minute', minval = 0, maxval = 59, group = 'Volume Filtering Hours (NYC Time)')
+endHour = input.int(15, 'End Hour', minval = 0, maxval = 23, group = 'Volume Filtering Hours (NYC Time)')
+endMinute = input.int(00, 'End Minute', minval = 0, maxval = 59, group = 'Volume Filtering Hours (NYC Time)')
+
+// Headband display settings
+showTimeHeadband = input.bool(true, 'Show Time Filter Headband', tooltip = 'Display time filter settings')
+headbandPosition = input.string('Bottom Center', 'Headband Position', options = ['Top Left', 'Top Center', 'Top Right', 'Middle Left', 'Middle Right', 'Bottom Left', 'Bottom Center', 'Bottom Right'])
+statsLookback = input.int(200, 'Stats Lookback Period', minval = 1, maxval = 500, tooltip = 'Number of bars to analyze for threshold statistics')
+
+// Color zone thresholds
+lowThreshold = input.float(30.0, 'Low Threshold (%)', minval = 0.0, maxval = 100.0, tooltip = 'Percentage below this will be colored red')
+highThreshold = input.float(70.0, 'High Threshold (%)', minval = 0.0, maxval = 100.0, tooltip = 'Percentage above this will be colored green')
+
+// Function to check if a time is within trading hours (NYC time)
+isTimeInRange(t) =>
+    barHour = hour(t, 'America/New_York')
+    barMinute = minute(t, 'America/New_York')
+
+    // Convert times to minutes for easier comparison
+    barTimeInMinutes = barHour * 60 + barMinute
+    startTimeInMinutes = startHour * 60 + startMinute
+    endTimeInMinutes = endHour * 60 + endMinute
+
+    // Check if bar is within the time range
+    barTimeInMinutes >= startTimeInMinutes and barTimeInMinutes <= endTimeInMinutes
+
+// Calculate filtered and unfiltered volume based on timeframe
+filteredVolume = 0.0
+unfilteredVolume = 0.0
+
+if timeframe.isintraday
+    // For intraday charts, just check the current bar's time (no lower TF lookup needed)
+    nycTime = time('', 'America/New_York')
+    filteredVolume := isTimeInRange(nycTime) ? volume : 0
+    unfilteredVolume := volume
+else
+    // For daily or higher timeframes, fetch lower timeframe data (30-min bars for performance)
+    volArray = request.security_lower_tf(syminfo.tickerid, '30', volume)
+    timeArray = request.security_lower_tf(syminfo.tickerid, '30', time)
+
+    float sessionVol = 0.0
+    float totalVol = 0.0
+
+    if array.size(volArray) > 0
+        for i = 0 to array.size(volArray) - 1
+            barVol = array.get(volArray, i)
+            barTime = array.get(timeArray, i)
+            totalVol += barVol
+            if isTimeInRange(barTime)
+                sessionVol += barVol
+
+    filteredVolume := sessionVol
+    unfilteredVolume := totalVol
+
+// Calculate percentage (handle division by zero)
+volumePercentage = unfilteredVolume > 0 ? filteredVolume / unfilteredVolume * 100 : 0.0
+
+// Calculate threshold statistics for headband
+greenCount = 0
+redCount = 0
+for i = 0 to statsLookback - 1
+    pastPercentage = volumePercentage[i]
+    if pastPercentage > highThreshold
+        greenCount += 1
+    else if pastPercentage < lowThreshold
+        redCount += 1
+
+// Determine bar color based on thresholds
+// Order: white (color 0), green (color 1), red (color 2)
+barColor = if volumePercentage >= lowThreshold and volumePercentage <= highThreshold
+    color.new(color.white, 90) // 30-70%: White with 15% opacity (color 0)
+else if volumePercentage > highThreshold
+    color.green // > 70%: High filtered volume (color 1)
+else
+    color.red // < 30%: Low filtered volume (color 2)
+
+// Plot the percentage as vertical bars
+plot(volumePercentage, title = 'Volume Filter %', color = barColor, linewidth = 1, style = plot.style_columns)
+
+// Add reference lines
+hline(50, 'Middle', color = color.new(color.gray, 50), linestyle = hline.style_dotted)
+hline(lowThreshold, 'Low Threshold', color = color.new(color.red, 70), linestyle = hline.style_dashed)
+hline(highThreshold, 'High Threshold', color = color.new(color.green, 70), linestyle = hline.style_dashed)
+
+// Display time filter headband
+if showTimeHeadband
+    // Convert user's position choice to position constant
+    tablePosition = headbandPosition == 'Top Left' ? position.top_left : headbandPosition == 'Top Center' ? position.top_center : headbandPosition == 'Top Right' ? position.top_right : headbandPosition == 'Middle Left' ? position.middle_left : headbandPosition == 'Middle Right' ? position.middle_right : headbandPosition == 'Bottom Left' ? position.bottom_left : headbandPosition == 'Bottom Center' ? position.bottom_center : position.bottom_right
+
+    var table headband = table.new(tablePosition, 1, 1, bgcolor = color.new(color.blue, 0), border_width = 1, border_color = color.new(color.blue, 0))
+
+    // Format time strings with leading zeros
+    startTimeStr = str.format('{0,number,00}:{1,number,00}', startHour, startMinute)
+    endTimeStr = str.format('{0,number,00}:{1,number,00}', endHour, endMinute)
+
+    headbandText = '⏰ ' + startTimeStr + ' - ' + endTimeStr + ' (NYC) | Last ' + str.tostring(statsLookback) + ' bars: 🟢 ' + str.tostring(greenCount) + ' | 🔴 ' + str.tostring(redCount)
+
+    table.cell(headband, 0, 0, headbandText, text_color = color.white, text_size = size.small)
