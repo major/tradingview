@@ -91,7 +91,7 @@ plot(volumeSMA, style = plot.style_columns, color = color.new(#8b8ba7, 30), line
 
 // Display time filter headband
 if enableTimeFilter and showTimeHeadband
-    var table headband = table.new(position.top_center, 1, 1, bgcolor = color.new(color.blue, 85), border_width = 1, border_color = color.new(color.blue, 50))
+    var table headband = table.new(position.bottom_center, 1, 1, bgcolor = color.new(color.blue, 10), border_width = 1, border_color = color.new(color.blue, 0))
 
     // Format time strings with leading zeros
     startTimeStr = str.format('{0,number,00}:{1,number,00}', startHour, startMinute)
