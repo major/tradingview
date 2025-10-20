@@ -1,0 +1,108 @@
+// Copyright 2025 Major Hayden
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//@version=6
+indicator('Volume Ratio vs SPY', shorttitle = 'Vol Ratio', format = format.volume, overlay = false)
+
+// ============================================================================
+// USER INPUTS
+// ============================================================================
+
+// Comparison symbol input
+comparisonSymbol = input.symbol('SPY', 'Comparison Symbol', tooltip = 'Symbol to compare volume against (default: SPY)')
+
+// SMA settings
+showSMA = input.bool(false, 'Show SMA', tooltip = 'Display simple moving average of the volume ratio')
+smaLength = input.int(10, 'SMA Length', minval = 1, tooltip = 'Simple moving average period for smoothing the volume ratio')
+
+// Alert threshold inputs
+highRatioThreshold = input.float(2.0, 'High Ratio Alert Threshold', minval = 1.0, step = 0.1, tooltip = 'Alert when volume ratio exceeds this value')
+lowRatioThreshold = input.float(0.5, 'Low Ratio Alert Threshold', minval = 0.1, maxval = 1.0, step = 0.1, tooltip = 'Alert when volume ratio falls below this value')
+
+// ============================================================================
+// COLOR INPUTS
+// ============================================================================
+
+colorHighRatio = input.color(color.new(color.green, 0), 'High Ratio (>= 2.0)', group = 'Colors')
+colorAboveOne = input.color(color.new(color.green, 50), 'Above 1.0', group = 'Colors')
+colorBelowOne = input.color(color.new(color.red, 50), 'Below 1.0', group = 'Colors')
+colorLowRatio = input.color(color.new(color.red, 0), 'Low Ratio (<= 0.5)', group = 'Colors')
+colorSMA = input.color(color.new(color.blue, 0), 'SMA Line', group = 'Colors')
+colorRefLine = input.color(color.new(color.gray, 0), 'Reference Line (1.0)', group = 'Colors')
+
+// ============================================================================
+// CALCULATIONS
+// ============================================================================
+
+// Get volume from comparison symbol
+comparisonVolume = request.security(comparisonSymbol, timeframe.period, volume, lookahead = barmerge.lookahead_off)
+
+// Calculate volume ratio (current symbol volume / comparison symbol volume)
+// Handle division by zero by using na when comparison volume is 0 or na
+volumeRatio = comparisonVolume > 0 ? volume / comparisonVolume : na
+
+// Calculate SMA of the volume ratio
+volumeRatioSMA = ta.sma(volumeRatio, smaLength)
+
+// Determine bar color based on ratio value
+getRatioColor() =>
+    if na(volumeRatio)
+        color.gray
+    else if volumeRatio >= 2.0
+        colorHighRatio
+    else if volumeRatio >= 1.0
+        colorAboveOne
+    else if volumeRatio <= 0.5
+        colorLowRatio
+    else
+        colorBelowOne
+
+ratioColor = getRatioColor()
+
+// ============================================================================
+// ALERT CONDITIONS
+// ============================================================================
+
+isHighRatio = volumeRatio >= highRatioThreshold
+isLowRatio = volumeRatio <= lowRatioThreshold
+
+alertcondition(isHighRatio, title = 'High Volume Ratio', message = '🔥 High volume ratio detected on {{ticker}} - volume significantly exceeds comparison symbol')
+alertcondition(isLowRatio, title = 'Low Volume Ratio', message = '❄️ Low volume ratio detected on {{ticker}} - volume significantly below comparison symbol')
+
+// ============================================================================
+// PLOTTING
+// ============================================================================
+
+// Plot volume ratio as columns (vertical bars)
+plot(volumeRatio, title = 'Volume Ratio', style = plot.style_columns, color = ratioColor, linewidth = 2)
+
+// Plot SMA of volume ratio as a line (if enabled)
+plot(showSMA ? volumeRatioSMA : na, title = 'Volume Ratio SMA', style = plot.style_line, color = colorSMA, linewidth = 2)
+
+// Plot horizontal reference line at 1.0 (where volumes are equal)
+hline(1.0, title = 'Equal Volume Reference', color = colorRefLine, linestyle = hline.style_solid, linewidth = 1)
+
+// Additional reference lines for visual zones
+hline(2.0, title = 'High Ratio Reference', color = color.new(colorHighRatio, 80), linestyle = hline.style_dotted, linewidth = 1)
+hline(0.5, title = 'Low Ratio Reference', color = color.new(colorLowRatio, 80), linestyle = hline.style_dotted, linewidth = 1)
+
+// ============================================================================
+// DATA WINDOW VALUES
+// ============================================================================
+
+// Display values in data window for debugging
+plot(volume, title = 'Current Volume', display = display.data_window, color = color.blue)
+plot(comparisonVolume, title = 'Comparison Volume', display = display.data_window, color = color.orange)
+plot(volumeRatio, title = 'Volume Ratio', display = display.data_window, color = color.white)
+plot(volumeRatioSMA, title = 'Volume Ratio SMA', display = display.data_window, color = color.gray)
