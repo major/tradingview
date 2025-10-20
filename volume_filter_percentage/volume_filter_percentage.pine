@@ -74,6 +74,25 @@ else
 // Calculate percentage (handle division by zero)
 volumePercentage = unfilteredVolume > 0 ? filteredVolume / unfilteredVolume * 100 : 0.0
 
+// Detect if we've reached the filter start time yet (to avoid showing red before filter starts)
+hasReachedFilterStart = true  // Default to true
+if timeframe.isintraday
+    // For intraday, check if current bar time is past the start time
+    nycTime = time('', 'America/New_York')
+    barHour = hour(nycTime, 'America/New_York')
+    barMinute = minute(nycTime, 'America/New_York')
+    barTimeInMinutes = barHour * 60 + barMinute
+    startTimeInMinutes = startHour * 60 + startMinute
+    hasReachedFilterStart := barTimeInMinutes >= startTimeInMinutes
+else
+    // For daily+, check if any lower TF bar has reached or passed the start time
+    timeArray = request.security_lower_tf(syminfo.tickerid, '30', time)
+    if array.size(timeArray) > 0
+        lastBarTime = array.get(timeArray, array.size(timeArray) - 1)
+        lastBarTimeInMinutes = hour(lastBarTime, 'America/New_York') * 60 + minute(lastBarTime, 'America/New_York')
+        startTimeInMinutes = startHour * 60 + startMinute
+        hasReachedFilterStart := lastBarTimeInMinutes >= startTimeInMinutes
+
 // Calculate threshold statistics for headband
 greenCount = 0
 redCount = 0
@@ -86,7 +105,9 @@ for i = 0 to statsLookback - 1
 
 // Determine bar color based on thresholds
 // Order: white (color 0), green (color 1), red (color 2)
-barColor = if volumePercentage >= lowThreshold and volumePercentage <= highThreshold
+barColor = if not hasReachedFilterStart
+    color.new(color.white, 90) // Before filter start: White with transparency
+else if volumePercentage >= lowThreshold and volumePercentage <= highThreshold
     color.new(color.white, 90) // 30-70%: White with 15% opacity (color 0)
 else if volumePercentage > highThreshold
     color.green // > 70%: High filtered volume (color 1)

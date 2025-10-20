@@ -73,9 +73,28 @@ else
 // Calculate percentage (handle division by zero)
 volumePercentage = unfilteredVolume > 0 ? filteredVolume / unfilteredVolume * 100 : 0.0
 
-// Determine conditions for markers
+// Detect if we've reached the filter start time yet (to avoid showing red before filter starts)
+hasReachedFilterStart = true  // Default to true
+if timeframe.isintraday
+    // For intraday, check if current bar time is past the start time
+    nycTime = time('', 'America/New_York')
+    barHour = hour(nycTime, 'America/New_York')
+    barMinute = minute(nycTime, 'America/New_York')
+    barTimeInMinutes = barHour * 60 + barMinute
+    startTimeInMinutes = startHour * 60 + startMinute
+    hasReachedFilterStart := barTimeInMinutes >= startTimeInMinutes
+else
+    // For daily+, check if any lower TF bar has reached or passed the start time
+    timeArray = request.security_lower_tf(syminfo.tickerid, '30', time)
+    if array.size(timeArray) > 0
+        lastBarTime = array.get(timeArray, array.size(timeArray) - 1)
+        lastBarTimeInMinutes = hour(lastBarTime, 'America/New_York') * 60 + minute(lastBarTime, 'America/New_York')
+        startTimeInMinutes = startHour * 60 + startMinute
+        hasReachedFilterStart := lastBarTimeInMinutes >= startTimeInMinutes
+
+// Determine conditions for markers (only show red after filter start time)
 isGreen = volumePercentage > highThreshold
-isRed = volumePercentage < lowThreshold
+isRed = hasReachedFilterStart and volumePercentage < lowThreshold
 
 // Plot markers below the bar
 plotshape(showGreenMarkers and isGreen, title = 'High Quality Volume', style = shape.circle, location = location.belowbar, color = color.green, size = size.auto)
