@@ -1,0 +1,174 @@
+// Copyright 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Original version © stageanalysis
+// Corrected and improved version
+//
+// This indicator implements Stan Weinstein's Mansfield Relative Strength
+// methodology as described in:
+//
+//   Weinstein, S. (1988). Secrets for Profiting in Bull and Bear Markets.
+//   New York: McGraw-Hill.
+//
+// The Mansfield RS is a key component of Weinstein's Stage Analysis, which
+// identifies four distinct market stages to optimize entry and exit timing.
+
+//@version=6
+indicator('Mansfield Relative Strength (Weinstein Method)', shorttitle='Mansfield RS', overlay=false)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ═══════════════════════════════════════════════════════════════════════════
+// Stan Weinstein's Mansfield RS Formula:
+// Step 1: RP = (Stock Close / Index Close) × 100
+// Step 2: MRS = ((RP / SMA(RP, n)) - 1) × 100
+//
+// Where n = 52 for weekly charts (Weinstein's primary timeframe)
+//       n = 200 for daily charts
+
+sym = input.symbol(title='Benchmark Symbol', defval='SPCFD:SPX', tooltip='Index to compare against (default: S&P 500)')
+resolution = input.timeframe('W', title='Timeframe', tooltip='Weinstein used Weekly charts with 52-period MA')
+maLength = input.int(52, minval=1, title='MA Length', tooltip='52 for weekly, 200 for daily charts')
+stageSmoothingPeriod = input.int(3, minval=1, maxval=10, title='Stage Smoothing', tooltip='Bars required to confirm trend change (higher = less flipping)', group='Stage Detection')
+
+// Display Options
+showColoredLine = input.bool(true, title='Color-Coded MRS Line', tooltip='Change line color based on Weinstein stage', group='Display')
+showMarkers = input.bool(false, title='Stage Transition Markers', tooltip='Show labels when entering Stage 2/4', group='Display')
+showTable = input.bool(true, title='Show Info Table', tooltip='Display current stage information', group='Display')
+tablePosition = input.string('top_center', title='Table Position', options=['top_left', 'top_center', 'top_right', 'middle_left', 'middle_center', 'middle_right', 'bottom_left', 'bottom_center', 'bottom_right'], tooltip='Position of the info table', group='Display')
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CALCULATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Retrieve data for BOTH symbols at the same timeframe with repainting protection
+// This ensures accurate comparison - both stock and benchmark use the same resolution
+benchmarkClose = request.security(sym, resolution, close, lookahead=barmerge.lookahead_off)
+stockClose = request.security(syminfo.tickerid, resolution, close, lookahead=barmerge.lookahead_off)
+
+// Step 1: Calculate Relative Performance (RP)
+relativePerformance = stockClose / benchmarkClose * 100
+
+// Step 2: Calculate 52-week (or n-period) moving average of RP
+rpMovingAverage = ta.sma(relativePerformance, maLength)
+
+// Step 3: Calculate Mansfield Relative Strength
+// MRS = ((RP / SMA(RP, n)) - 1) × 100
+mansfieldRS = ((relativePerformance / rpMovingAverage) - 1) * 100
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STAGE DETECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Determine if MRS is rising or falling (with smoothing to reduce flipping)
+// Using stageSmoothingPeriod bars instead of just 1 for more stable stage detection
+mrsRising = ta.rising(mansfieldRS, stageSmoothingPeriod)
+mrsFalling = ta.falling(mansfieldRS, stageSmoothingPeriod)
+
+// Determine current Weinstein stage
+// Stage 1: MRS < 0, rising (Basing/Accumulation)
+// Stage 2: MRS > 0, rising (Advancing/Markup) ✓ BUY
+// Stage 3: MRS > 0, falling (Topping/Distribution)
+// Stage 4: MRS < 0, falling (Declining/Markdown) ✗ AVOID
+
+var int currentStage = na
+if mansfieldRS > 0 and mrsRising
+    currentStage := 2
+else if mansfieldRS < 0 and mrsRising
+    currentStage := 1
+else if mansfieldRS > 0 and mrsFalling
+    currentStage := 3
+else if mansfieldRS < 0 and mrsFalling
+    currentStage := 4
+else
+    // Flat/unchanged - maintain previous stage
+    currentStage := currentStage[1]
+
+// Detect stage transitions (for markers)
+stage2Entry = currentStage == 2 and currentStage[1] != 2
+stage4Entry = currentStage == 4 and currentStage[1] != 4
+
+// Stage colors
+stageColor = switch currentStage
+    1 => color.new(color.blue, 0)      // Stage 1: Light Blue
+    2 => color.new(color.green, 0)     // Stage 2: Green (BUY)
+    3 => color.new(color.orange, 0)    // Stage 3: Orange
+    4 => color.new(color.red, 0)       // Stage 4: Red (AVOID)
+    => color.black
+
+// Stage names for table
+stageName = switch currentStage
+    1 => "Stage 1: Basing"
+    2 => "Stage 2: Advancing ✓"
+    3 => "Stage 3: Topping"
+    4 => "Stage 4: Declining ✗"
+    => "Unknown"
+
+// Trend direction for table
+trendText = mrsRising ? "Rising ↗" : mrsFalling ? "Falling ↘" : "Flat →"
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PLOTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Plot the Mansfield RS line (color-coded if enabled)
+// Simplified: Green above zero (outperforming), Red below zero (underperforming)
+simpleColor = mansfieldRS >= 0 ? color.new(color.green, 0) : color.new(color.red, 0)
+plotColor = showColoredLine ? simpleColor : color.black
+plot(mansfieldRS, title='Mansfield RS', color=plotColor, linewidth=2)
+
+// Plot zero line (key reference for Weinstein Stage Analysis)
+// MRS > 0: Outperforming vs 52-week average (Stage 2/3)
+// MRS < 0: Underperforming vs 52-week average (Stage 1/4)
+hline(0, title='Zero Line', color=color.white, linestyle=hline.style_dotted, linewidth=1)
+
+// Plot stage transition markers
+if showMarkers and stage2Entry
+    label.new(bar_index, mansfieldRS, text='Stage 2 ✓', style=label.style_label_up, color=color.new(color.green, 0), textcolor=color.white, size=size.small)
+
+if showMarkers and stage4Entry
+    label.new(bar_index, mansfieldRS, text='Stage 4 ✗', style=label.style_label_down, color=color.new(color.red, 0), textcolor=color.white, size=size.small)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INFO TABLE
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Convert table position string to position constant
+tPos = switch tablePosition
+    'top_left' => position.top_left
+    'top_center' => position.top_center
+    'top_right' => position.top_right
+    'middle_left' => position.middle_left
+    'middle_center' => position.middle_center
+    'middle_right' => position.middle_right
+    'bottom_left' => position.bottom_left
+    'bottom_center' => position.bottom_center
+    'bottom_right' => position.bottom_right
+    => position.top_center
+
+// Create and populate table - compact single-line format
+if showTable and barstate.islast
+    var table infoTable = table.new(tPos, 3, 1, border_width=1, border_color=color.new(color.gray, 50), frame_color=color.new(color.gray, 50), frame_width=1)
+
+    // Compact single row: Stage name (colored) | Trend
+    table.cell(infoTable, 0, 0, text=stageName, text_color=color.white, bgcolor=stageColor, text_size=size.small)
+    table.cell(infoTable, 2, 0, text=trendText, text_color=color.gray, bgcolor=color.new(color.white, 0), text_size=size.small)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WEINSTEIN STAGE ANALYSIS REFERENCE
+// ═══════════════════════════════════════════════════════════════════════════
+// Stage 1 (Basing): MRS < 0, starting to stabilize
+// Stage 2 (Advancing): MRS > 0 and rising ✓ Best time to buy
+// Stage 3 (Topping): MRS > 0 but starting to decline
+// Stage 4 (Declining): MRS < 0 and falling ✗ Avoid or short
