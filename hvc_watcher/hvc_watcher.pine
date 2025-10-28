@@ -120,6 +120,19 @@ getShape(style) =>
         'xcross' => shape.xcross
         => shape.circle
 
+// Function to convert position string to position constant
+getTablePosition(positionStr) =>
+    switch positionStr
+        'Top Left' => position.top_left
+        'Top Center' => position.top_center
+        'Top Right' => position.top_right
+        'Middle Left' => position.middle_left
+        'Middle Right' => position.middle_right
+        'Bottom Left' => position.bottom_left
+        'Bottom Center' => position.bottom_center
+        'Bottom Right' => position.bottom_right
+        => position.top_center  // Default fallback
+
 selected_shape = getShape(shape_style)
 
 // Determine which markers to show based on priority mode
@@ -206,7 +219,7 @@ if show_current_multiplier and barstate.islast and volume_sma > 0
 // Display HVC Info Panel (combined time filter and streak tracker)
 if barstate.islast and (showHVCStreak or (enableTimeFilter and showTimeHeadband))
     // Convert user's position choice to position constant
-    tablePos = infoPanelPosition == 'Top Left' ? position.top_left : infoPanelPosition == 'Top Center' ? position.top_center : infoPanelPosition == 'Top Right' ? position.top_right : infoPanelPosition == 'Middle Left' ? position.middle_left : infoPanelPosition == 'Middle Right' ? position.middle_right : infoPanelPosition == 'Bottom Left' ? position.bottom_left : infoPanelPosition == 'Bottom Center' ? position.bottom_center : position.bottom_right
+    tablePos = getTablePosition(infoPanelPosition)
 
     // Determine background color based on streak direction
     panelBgColor = if showHVCStreak and streakInitialized and streakCount > 0
