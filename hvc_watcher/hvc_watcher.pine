@@ -110,6 +110,9 @@ is_current_day = barstate.isrealtime and barstate.isconfirmed == false
 // Skip low volume check on current day if market is still open (using filtered volume)
 is_low_volume = not is_current_day and filteredVolume <= volume_sma * low_volume_threshold
 
+// Cache volume multiplier calculation (used in multiple places)
+volume_multiplier_value = volume_sma > 0 ? filteredVolume / volume_sma : 0
+
 // Function to get the appropriate shape
 getShape(style) =>
     switch style
@@ -178,8 +181,7 @@ if is_hvc and barstate.isconfirmed
 
 // Plot a label above the bar or a yellow circle depending on configuration (using filtered volume)
 if show_multiplier_labels and is_sma_multiplier and volume_sma > 0
-    multiplier = filteredVolume / volume_sma
-    multiplier_rounded = math.round(multiplier)
+    multiplier_rounded = math.round(volume_multiplier_value)
     label_text = str.tostring(multiplier_rounded) + "x"
     label.new(bar_index, close, label_text,
               color = label_bg_color,
@@ -206,8 +208,7 @@ if show_rectangles and is_sma_multiplier
 
 // Show real-time multiplier for current bar (using filtered volume)
 if show_current_multiplier and barstate.islast and volume_sma > 0
-    current_multiplier = filteredVolume / volume_sma
-    current_text = str.tostring(current_multiplier, format.mintick) + "x"
+    current_text = str.tostring(volume_multiplier_value, format.mintick) + "x"
     var label current_label = na
     label.delete(current_label)
     current_label := label.new(bar_index, low, current_text,
