@@ -219,7 +219,9 @@ calculateFragility() =>
     [fragScore, rvPercentile, atrPercent, bbWidth, ttmSqueeze, nr7, nr4, multipleInsideDays, insideDay, dojiReversal, atrCompression, bbSqueeze]
 
 // Get all calculated values from the selected timeframe
-[fragScore, rvPercentile, atrPercent, bbWidth, ttmSqueeze, nr7, nr4, multipleInsideDays, insideDay, dojiReversal, atrCompression, bbSqueeze] = request.security(syminfo.tickerid, selectedTimeframe, calculateFragility(), lookahead = barmerge.lookahead_off)
+// Using lookahead_on to ensure we only use completed period data, eliminating false compression signals
+// from incomplete periods (e.g., early in the week on weekly charts)
+[fragScore, rvPercentile, atrPercent, bbWidth, ttmSqueeze, nr7, nr4, multipleInsideDays, insideDay, dojiReversal, atrCompression, bbSqueeze] = request.security(syminfo.tickerid, selectedTimeframe, calculateFragility(), lookahead = barmerge.lookahead_on)
 
 // ═══════════════════════════════════════════════════════════════
 // SECTION 6: VISUALIZATION - SEE THE PRESSURE
