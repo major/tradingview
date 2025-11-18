@@ -1,0 +1,103 @@
+//@version=6
+indicator("Mother Bar Pattern", shorttitle="Mother Bar 👵", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// 📊 User Inputs
+showLabels = input.bool(true, "Show Grandma Emoji", group="Display")
+showLiveCount = input.bool(true, "Show Live Child Count", group="Display")
+showBottle = input.bool(true, "Show Baby Bottle at Threshold", group="Display")
+minChildren = input.int(3, "Minimum Children to Display", minval=1, group="Display")
+
+// 📈 State variables - track the current mother bar pattern
+var float motherHigh = na          // Mother bar's high
+var float motherLow = na           // Mother bar's low
+var int childCount = 0             // Number of children accumulated
+var label liveCountLabel = na      // Live count label (deleted and recreated each bar)
+
+// 🎯 Check if current bar is a child (completely inside mother range)
+isChild = not na(motherHigh) and not na(motherLow) and high < motherHigh and low > motherLow
+
+// 🚀 Check for breakout
+breakoutUp = not na(motherHigh) and high > motherHigh
+breakoutDown = not na(motherLow) and low < motherLow
+isBreakout = breakoutUp or breakoutDown
+
+// 🍼 Track if we should show baby bottle (at threshold and beyond)
+showBottleNow = false
+
+// 👵 Track if we should show grandma emoji on breakout
+showGrandmaBullish = false
+showGrandmaBearish = false
+
+// 💫 Process the current bar
+if isChild
+    // ✅ This bar is a child - increment counter
+    childCount += 1
+
+    // 🍼 Show bottle if we've reached the threshold
+    showBottleNow := childCount >= minChildren
+
+    // No grandma on child bars
+    showGrandmaBullish := false
+    showGrandmaBearish := false
+
+    // 🔢 Update live count label
+    if showLiveCount
+        // Delete old label
+        if not na(liveCountLabel)
+            label.delete(liveCountLabel)
+        // Create new label on current bar
+        liveCountLabel := label.new(bar_index, high, str.tostring(childCount), color=color.new(color.blue, 80), textcolor=color.blue, style=label.style_label_down, size=size.tiny)
+
+else if isBreakout
+    // 🎊 Breakout detected! Complete the pattern and show grandma
+
+    // Delete live count label since pattern is completing
+    if not na(liveCountLabel)
+        label.delete(liveCountLabel)
+        liveCountLabel := na
+
+    if childCount >= minChildren
+        // 👵 Show grandma emoji based on breakout direction
+        if showLabels
+            showGrandmaBullish := breakoutUp
+            showGrandmaBearish := breakoutDown
+        else
+            showGrandmaBullish := false
+            showGrandmaBearish := false
+    else
+        showGrandmaBullish := false
+        showGrandmaBearish := false
+
+    // 🆕 Current breakout bar becomes the new mother
+    motherHigh := high
+    motherLow := low
+    childCount := 0
+
+else
+    // 🔄 Not a child and not continuing a pattern - this bar becomes potential new mother
+    // (This handles the initial state and cases where bar breaks outside range without a valid pattern)
+
+    // Delete live count label
+    if not na(liveCountLabel)
+        label.delete(liveCountLabel)
+        liveCountLabel := na
+
+    // No grandma on reset
+    showGrandmaBullish := false
+    showGrandmaBearish := false
+
+    // Initialize new potential mother
+    motherHigh := high
+    motherLow := low
+    childCount := 0
+
+// 🍼 Show baby bottle on child bars at/above threshold
+plotchar(showBottle and showBottleNow, "Baby Bottle", "🍼", location.belowbar, color=color.blue, size=size.tiny)
+
+// 👵 Show grandma emoji on breakout bars
+plotchar(showGrandmaBullish, "Grandma Bullish", "👵", location.belowbar, color=color.green, size=size.tiny)
+plotchar(showGrandmaBearish, "Grandma Bearish", "👵", location.abovebar, color=color.red, size=size.tiny)
+
+// 🔍 Plot debugging info (optional - can be hidden in settings)
+plotchar(isChild, "Is Child", "C", location.top, color=color.blue, size=size.tiny, display=display.none)
+plotchar(isBreakout, "Is Breakout", "B", location.top, color=color.orange, size=size.tiny, display=display.none)

@@ -1,0 +1,76 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © MajorThorn
+
+//@version=6
+indicator('Inside Bar Chain Detector', shorttitle='Inside Chain 🔗', overlay=true, max_labels_count=500)
+
+// ============================================================================
+// 📊 USER INPUTS
+// ============================================================================
+
+// Visual Settings
+showLabels = input.bool(false, 'Show Chain Info Labels', tooltip='Display labels showing chain length and range contraction percentage')
+markerColor = input.color(color.yellow, 'Marker Color', tooltip='Color of the marker displayed below inside bars')
+labelColor = input.color(color.new(color.white, 0), 'Label Text Color', tooltip='Color of the text in chain info labels')
+labelBgColor = input.color(color.new(color.blue, 20), 'Label Background', tooltip='Background color for chain info labels')
+
+// ============================================================================
+// 📈 INSIDE BAR CHAIN DETECTION LOGIC
+// ============================================================================
+
+// An inside bar fits completely within the previous bar's range
+// High must be lower than previous high AND low must be higher than previous low
+isInsideBar = high < high[1] and low > low[1]
+
+// Track anchor bar (the bar that starts the chain) using state variables
+var float anchorHigh = na  // High of the anchor bar
+var float anchorLow = na   // Low of the anchor bar
+var int chainLength = 0     // Number of bars in current chain (including anchor)
+
+// When we find an inside bar, check if we're continuing a chain or starting a new one
+if isInsideBar
+    if chainLength == 0
+        // First inside bar in a new chain - the anchor is the previous bar
+        anchorHigh := high[1]
+        anchorLow := low[1]
+        chainLength := 2  // Anchor + this inside bar
+    else
+        // Continuing existing chain
+        chainLength := chainLength + 1
+else
+    // Chain broken - reset
+    anchorHigh := na
+    anchorLow := na
+    chainLength := 0
+
+// Calculate range contraction relative to anchor bar
+currentRange = high - low
+anchorRange = anchorHigh - anchorLow
+rangeContraction = not na(anchorRange) and anchorRange > 0 ? (currentRange / anchorRange) * 100 : na
+
+// ============================================================================
+// 🎨 VISUAL OUTPUT
+// ============================================================================
+
+// Mark every inside bar with a yellow diamond below the bar
+plotshape(
+     series=isInsideBar,
+     location=location.belowbar,
+     style=shape.diamond,
+     size=size.auto,
+     color=markerColor,
+     title='Inside Bar Marker'
+     )
+
+// Show optional labels with chain length and range contraction
+if showLabels and isInsideBar and not na(rangeContraction)
+    labelText = str.format('Chain: {0}\nCompression: {1}%', chainLength, str.tostring(rangeContraction, '#.#'))
+    label.new(
+         bar_index,
+         low,
+         text=labelText,
+         style=label.style_label_up,
+         color=labelBgColor,
+         textcolor=labelColor,
+         size=size.small
+         )
