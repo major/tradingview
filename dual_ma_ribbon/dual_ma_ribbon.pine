@@ -1,0 +1,64 @@
+//@version=6
+indicator("Dual Moving Average Ribbon", shorttitle="Dual MA Ribbon", overlay=true)
+
+// === INPUTS ===
+// Fast MA Settings
+grpFast = "Fast Moving Average"
+fastLength = input.int(21, "Length", minval=1, group=grpFast)
+fastType = input.string("SMA", "Type", options=["SMA", "EMA", "WMA", "VWMA", "RMA", "HMA", "ALMA", "SMMA", "LSMA", "DEMA", "TEMA"], group=grpFast)
+fastSource = input.source(close, "Source", group=grpFast)
+
+// Slow MA Settings
+grpSlow = "Slow Moving Average"
+slowLength = input.int(50, "Length", minval=1, group=grpSlow)
+slowType = input.string("SMA", "Type", options=["SMA", "EMA", "WMA", "VWMA", "RMA", "HMA", "ALMA", "SMMA", "LSMA", "DEMA", "TEMA"], group=grpSlow)
+slowSource = input.source(close, "Source", group=grpSlow)
+
+// Colors (edit in Style tab)
+bullColor = #089981
+bearColor = #ef5350
+
+// === MA CALCULATION FUNCTION ===
+calcMA(src, len, maType) =>
+    switch maType
+        "SMA" => ta.sma(src, len)
+        "EMA" => ta.ema(src, len)
+        "WMA" => ta.wma(src, len)
+        "VWMA" => ta.vwma(src, len)
+        "RMA" => ta.rma(src, len)
+        "HMA" => ta.hma(src, len)
+        "ALMA" => ta.alma(src, len, 0.85, 6)
+        "SMMA" =>
+            smma = 0.0
+            smma := na(smma[1]) ? ta.sma(src, len) : (smma[1] * (len - 1) + src) / len
+            smma
+        "LSMA" => ta.linreg(src, len, 0)
+        "DEMA" =>
+            ema1 = ta.ema(src, len)
+            ema2 = ta.ema(ema1, len)
+            2 * ema1 - ema2
+        "TEMA" =>
+            ema1 = ta.ema(src, len)
+            ema2 = ta.ema(ema1, len)
+            ema3 = ta.ema(ema2, len)
+            3 * ema1 - 3 * ema2 + ema3
+        => ta.sma(src, len)
+
+// === CALCULATE MAs ===
+fastMA = calcMA(fastSource, fastLength, fastType)
+slowMA = calcMA(slowSource, slowLength, slowType)
+
+// === PLOTTING ===
+fastPlot = plot(fastMA, "Fast MA", color=color.new(bullColor, 35), linewidth=1)
+slowPlot = plot(slowMA, "Slow MA", color=color.new(bearColor, 35), linewidth=1)
+
+// Fill between MAs
+fillColor = fastMA > slowMA ? color.new(bullColor, 85) : color.new(bearColor, 85)
+fill(fastPlot, slowPlot, color=fillColor, title="MA Fill")
+
+// === ALERT CONDITIONS ===
+bullishCross = ta.crossover(fastMA, slowMA)
+bearishCross = ta.crossunder(fastMA, slowMA)
+
+alertcondition(bullishCross, title="Bullish Crossover", message="{{ticker}}: Fast MA crossed ABOVE Slow MA")
+alertcondition(bearishCross, title="Bearish Crossover", message="{{ticker}}: Fast MA crossed BELOW Slow MA")
