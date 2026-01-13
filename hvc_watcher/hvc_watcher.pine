@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 //@version=6
-indicator('HVC Watcher', shorttitle = 'HVC Watch', overlay = true, max_boxes_count = 100, max_labels_count = 500)
+indicator('HVC Watcher', shorttitle = 'HVC Watch', overlay = true, max_lines_count = 200, max_labels_count = 500)
 
 // Input parameters
 sma_length = input.int(20, title = 'Volume SMA Length', minval = 1)
@@ -41,11 +41,11 @@ shape_style = input.string('circles', title = 'Shape Style', options = ['circles
 // Priority mode input
 priority_mode = input.bool(true, title = 'Use Priority Mode (only show highest priority marker)')
 
-// Rectangle settings for high volume days
-show_rectangles = input.bool(true, title = 'Show Rectangles on High Volume Days')
-rect_bars_extend = input.int(90, title = 'Rectangle Extension (bars)', minval = 1, maxval = 100)
-rect_color = input.color(color.blue, title = 'Rectangle Color')
-rect_transparency = input.int(95, title = 'Rectangle Transparency (%)', minval = 0, maxval = 100)
+// Zone settings for high volume days
+show_zones = input.bool(true, title = 'Show Zones on High Volume Days')
+zone_color = input.color(color.blue, title = 'Zone Color')
+zone_transparency = input.int(95, title = 'Zone Fill Transparency (%)', minval = 0, maxval = 100)
+zone_edge_transparency = input.int(80, title = 'Zone Edge Transparency (%)', minval = 0, maxval = 100)
 
 // Label settings for volume multiplier
 show_multiplier_labels = input.bool(false, title = 'Show Volume Multiplier Labels')
@@ -191,9 +191,13 @@ plot(filteredVolume, title = 'Filtered Volume', display = display.data_window)
 plot(volume_sma, title = 'Volume SMA', display = display.data_window)
 plot(all_time_high_volume, title = 'All-Time High Volume', display = display.data_window)
 
-// Draw rectangles on high volume days (yellow circles)
-if show_rectangles and is_sma_multiplier
-    box.new(bar_index, high, bar_index + rect_bars_extend, low, border_color = na, bgcolor = color.new(rect_color, rect_transparency))
+// Draw zones on high volume days using linefill
+if show_zones and is_sma_multiplier
+    fillColor = color.new(zone_color, zone_transparency)
+    edgeColor = color.new(zone_color, zone_edge_transparency)
+    topLine = line.new(bar_index, high, bar_index + 1, high, extend = extend.right, color = edgeColor)
+    bottomLine = line.new(bar_index, low, bar_index + 1, low, extend = extend.right, color = edgeColor)
+    linefill.new(topLine, bottomLine, color = fillColor)
 
 // Show real-time multiplier for current bar (using filtered volume)
 if show_current_multiplier and barstate.islast and volume_sma > 0
