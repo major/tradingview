@@ -1,5 +1,5 @@
 //@version=6
-indicator('Market Tail Risk Detector (Quiet → Explosive)', overlay = false, max_bars_back = 500)
+indicator('Market Tail Risk Detector (Quiet → Explosive)', overlay = false, max_bars_back = 600)
 
 // ═══════════════════════════════════════════════════════════════
 // MARKET TAIL RISK DETECTOR - QUIET PERIODS → EXPLOSIVE MOVES
@@ -174,17 +174,6 @@ calculateFragility() =>
     nr7 = rangeDaily == ta.lowest(rangeDaily, 7)
     nr4 = rangeDaily == ta.lowest(rangeDaily, 4)
 
-    // Triangle formation: Converging highs and lows = apex breakout setup
-    pivotHigh = ta.pivothigh(high, 5, 5)
-    pivotLow = ta.pivotlow(low, 5, 5)
-    latestHigh = ta.valuewhen(not na(pivotHigh), pivotHigh, 0)
-    priorHigh = ta.valuewhen(not na(pivotHigh), pivotHigh, 1)
-    latestLow = ta.valuewhen(not na(pivotLow), pivotLow, 0)
-    priorLow = ta.valuewhen(not na(pivotLow), pivotLow, 1)
-    contractingHighs = not na(latestHigh) and not na(priorHigh) and latestHigh < priorHigh
-    risingLows = not na(latestLow) and not na(priorLow) and latestLow > priorLow
-    triangleForming = contractingHighs and risingLows
-
     // ═══════════════════════════════════════════════════════════════
     // 💤 SECTION 4: MOMENTUM DEATH - WHEN MOVEMENT STOPS
     // ═══════════════════════════════════════════════════════════════
@@ -220,9 +209,11 @@ calculateFragility() =>
     var int compressionDuration = 0
     if isCompressed
         // Check how many consecutive bars were compressed
+        // Must match isCompressed logic: (rvPercentile < 30 or atrCompression or bbSqueeze) and vovPercentile < 40
         consecCompressed = 0
         for i = 0 to 50
-            if i == 0 or (rvPercentile[i] < 30 and vovPercentile[i] < 40)
+            wasCompressed = (rvPercentile[i] < 30 or atrPercent[i] < atrMA[i] * 0.7 or bbWidth[i] < bbHistoricalWidth[i] * 0.5) and vovPercentile[i] < 40
+            if wasCompressed
                 consecCompressed += 1
             else
                 break
