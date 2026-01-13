@@ -15,47 +15,41 @@
 //@version=6
 indicator('HVC Watcher', shorttitle = 'HVC Watch', overlay = true, max_lines_count = 200, max_labels_count = 500)
 
-// Input parameters
-sma_length = input.int(20, title = 'Volume SMA Length', minval = 1)
-volume_multiplier = input.float(3.0, title = 'Volume Multiplier for High Volume', minval = 1.0, step = 0.1)
+// Volume settings
+sma_length = input.int(20, title = 'Volume SMA Length', minval = 1, group = 'Volume Settings')
+volume_multiplier = input.float(3.0, title = 'Volume Multiplier for High Volume', minval = 1.0, step = 0.1, group = 'Volume Settings')
 
 // Time filtering inputs
-enableTimeFilter = input.bool(false, 'Enable Time Filter', group = 'Volume Filtering', tooltip = 'Filter volume to specific hours (NYC time). Works on both intraday and daily timeframes.')
-startHour = input.int(10, 'Start Hour', minval = 0, maxval = 23, group = 'Volume Filtering')
-startMinute = input.int(30, 'Start Minute', minval = 0, maxval = 59, group = 'Volume Filtering')
-endHour = input.int(15, 'End Hour', minval = 0, maxval = 23, group = 'Volume Filtering')
-endMinute = input.int(00, 'End Minute', minval = 0, maxval = 59, group = 'Volume Filtering')
-showTimeHeadband = input.bool(true, 'Show Time Filter Headband', group = 'Volume Filtering', tooltip = 'Display time filter settings when time filter is enabled')
+enable_time_filter = input.bool(false, 'Enable Time Filter', group = 'Time Filtering', tooltip = 'Filter volume to specific hours (NYC time). Works on both intraday and daily timeframes.')
+start_hour = input.int(10, 'Start Hour', minval = 0, maxval = 23, group = 'Time Filtering')
+start_minute = input.int(30, 'Start Minute', minval = 0, maxval = 59, group = 'Time Filtering')
+end_hour = input.int(15, 'End Hour', minval = 0, maxval = 23, group = 'Time Filtering')
+end_minute = input.int(00, 'End Minute', minval = 0, maxval = 59, group = 'Time Filtering')
+show_time_headband = input.bool(true, 'Show Time Filter Headband', group = 'Time Filtering', tooltip = 'Display time filter settings when time filter is enabled')
 
-// HVC Info Panel settings
-showHVCStreak = input.bool(true, 'Show HVC Streak Tracker', group = 'Info Panel', tooltip = 'Display consecutive HVC direction streaks')
-infoPanelPosition = input.string('Top Center', 'Info Panel Position', options = ['Top Left', 'Top Center', 'Top Right', 'Middle Left', 'Middle Right', 'Bottom Left', 'Bottom Center', 'Bottom Right'], group = 'Info Panel')
+// Info panel settings
+show_hvc_streak = input.bool(true, 'Show HVC Streak Tracker', group = 'Info Panel', tooltip = 'Display consecutive HVC direction streaks')
+info_panel_position = input.string('Top Center', 'Info Panel Position', options = ['Top Left', 'Top Center', 'Top Right', 'Middle Left', 'Middle Right', 'Bottom Left', 'Bottom Center', 'Bottom Right'], group = 'Info Panel')
 
-// Color inputs
-color_all_time = input.color(color.green, title = 'All-Time High Volume Color')
-color_sma_mult = input.color(color.orange, title = 'High Volume (SMA Multiple) Color')
+// Marker settings
+color_all_time = input.color(color.green, title = 'All-Time High Volume Color', group = 'Markers')
+color_sma_mult = input.color(color.orange, title = 'High Volume (SMA Multiple) Color', group = 'Markers')
+shape_style = input.string('circles', title = 'Shape Style', options = ['circles', 'triangleup', 'diamond', 'cross', 'xcross'], group = 'Markers')
+priority_mode = input.bool(true, title = 'Use Priority Mode (only show highest priority marker)', group = 'Markers')
 
-// Shape style inputs
-shape_style = input.string('circles', title = 'Shape Style', options = ['circles', 'triangleup', 'diamond', 'cross', 'xcross'])
+// Zone settings
+show_zones = input.bool(true, title = 'Show Zones on High Volume Days', group = 'Zones')
+zone_color = input.color(color.blue, title = 'Zone Color', group = 'Zones')
+zone_transparency = input.int(95, title = 'Zone Fill Transparency (%)', minval = 0, maxval = 100, group = 'Zones')
+zone_edge_transparency = input.int(80, title = 'Zone Edge Transparency (%)', minval = 0, maxval = 100, group = 'Zones')
 
-// Priority mode input
-priority_mode = input.bool(true, title = 'Use Priority Mode (only show highest priority marker)')
-
-// Zone settings for high volume days
-show_zones = input.bool(true, title = 'Show Zones on High Volume Days')
-zone_color = input.color(color.blue, title = 'Zone Color')
-zone_transparency = input.int(95, title = 'Zone Fill Transparency (%)', minval = 0, maxval = 100)
-zone_edge_transparency = input.int(80, title = 'Zone Edge Transparency (%)', minval = 0, maxval = 100)
-
-// Label settings for volume multiplier
-show_multiplier_labels = input.bool(false, title = 'Show Volume Multiplier Labels')
-label_color = input.color(color.yellow, title = 'Label Text Color')
-label_bg_color = input.color(color.new(color.black, 80), title = 'Label Background Color')
-
-// Current bar multiplier label settings
-show_current_multiplier = input.bool(false, title = 'Show Current Bar Multiplier (Real-Time)')
-current_label_color = input.color(color.white, title = 'Current Bar Label Text Color')
-current_label_bg_color = input.color(color.new(color.blue, 50), title = 'Current Bar Label Background Color')
+// Label settings
+show_multiplier_labels = input.bool(false, title = 'Show Volume Multiplier Labels', group = 'Labels')
+label_color = input.color(color.yellow, title = 'Label Text Color', group = 'Labels')
+label_bg_color = input.color(color.new(color.black, 80), title = 'Label Background Color', group = 'Labels')
+show_current_multiplier = input.bool(false, title = 'Show Current Bar Multiplier (Real-Time)', group = 'Labels')
+current_label_color = input.color(color.white, title = 'Current Bar Label Text Color', group = 'Labels')
+current_label_bg_color = input.color(color.new(color.blue, 50), title = 'Current Bar Label Background Color', group = 'Labels')
 
 // Function to check if a time is within trading hours (NYC time)
 isTimeInRange(t) =>
@@ -64,14 +58,14 @@ isTimeInRange(t) =>
 
     // Convert times to minutes for easier comparison
     barTimeInMinutes = barHour * 60 + barMinute
-    startTimeInMinutes = startHour * 60 + startMinute
-    endTimeInMinutes = endHour * 60 + endMinute
+    startTimeInMinutes = start_hour * 60 + start_minute
+    endTimeInMinutes = end_hour * 60 + end_minute
 
     // Check if bar is within the time range
     barTimeInMinutes >= startTimeInMinutes and barTimeInMinutes <= endTimeInMinutes
 
 // Calculate filtered volume based on timeframe
-filteredVolume = if not enableTimeFilter
+filteredVolume = if not enable_time_filter
     volume
 else if timeframe.isintraday
     // For intraday charts, just check the current bar's time
@@ -169,7 +163,7 @@ if is_hvc and barstate.isconfirmed
 
         lastHVCClose := close
 
-// Plot a label above the bar or a yellow circle depending on configuration (using filtered volume)
+// Plot volume multiplier labels if enabled
 if show_multiplier_labels and is_sma_multiplier and volume_sma > 0
     multiplier_rounded = math.round(volume_multiplier_value)
     label_text = str.tostring(multiplier_rounded) + "x"
@@ -211,12 +205,12 @@ if show_current_multiplier and barstate.islast and volume_sma > 0
                               size = size.normal)
 
 // Display HVC Info Panel (combined time filter and streak tracker)
-if barstate.islast and (showHVCStreak or (enableTimeFilter and showTimeHeadband))
+if barstate.islast and (show_hvc_streak or (enable_time_filter and show_time_headband))
     // Convert user's position choice to position constant
-    tablePos = getTablePosition(infoPanelPosition)
+    tablePos = getTablePosition(info_panel_position)
 
     // Determine background color based on streak direction
-    panelBgColor = if showHVCStreak and streakInitialized and streakCount > 0
+    panelBgColor = if show_hvc_streak and streakInitialized and streakCount > 0
         if streakUp
             color.new(color.green, 70)  // Soft green for upward streaks
         else
@@ -230,7 +224,7 @@ if barstate.islast and (showHVCStreak or (enableTimeFilter and showTimeHeadband)
     infoParts = array.new<string>()
 
     // Add streak info if enabled
-    if showHVCStreak
+    if show_hvc_streak
         streakText = if streakCount == 0 or not streakInitialized
             '📊 No HVC streak yet'
         else
@@ -239,9 +233,9 @@ if barstate.islast and (showHVCStreak or (enableTimeFilter and showTimeHeadband)
         array.push(infoParts, streakText)
 
     // Add time filter info if enabled
-    if enableTimeFilter and showTimeHeadband
-        startTimeStr = str.format('{0,number,00}:{1,number,00}', startHour, startMinute)
-        endTimeStr = str.format('{0,number,00}:{1,number,00}', endHour, endMinute)
+    if enable_time_filter and show_time_headband
+        startTimeStr = str.format('{0,number,00}:{1,number,00}', start_hour, start_minute)
+        endTimeStr = str.format('{0,number,00}:{1,number,00}', end_hour, end_minute)
         timeText = '⏰ Filter: ' + startTimeStr + ' - ' + endTimeStr + ' (NYC)'
         array.push(infoParts, timeText)
 
