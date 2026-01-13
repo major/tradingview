@@ -168,8 +168,8 @@ if show_multiplier_labels and is_sma_multiplier and volume_sma > 0
     multiplier_rounded = math.round(volume_multiplier_value)
     label_text = str.tostring(multiplier_rounded) + "x"
     label.new(bar_index, close, label_text,
-              color = label_bg_color,
-              textcolor = label_color,
+              color = color.orange,
+              textcolor = color.black,
               style = label.style_label_right,
               size = size.normal)
 
@@ -199,8 +199,8 @@ if show_current_multiplier and barstate.islast and volume_sma > 0
     var label current_label = na
     label.delete(current_label)
     current_label := label.new(bar_index, low, current_text,
-                              color = current_label_bg_color,
-                              textcolor = current_label_color,
+                              color = color.orange,
+                              textcolor = color.black,
                               style = label.style_label_upper_left,
                               size = size.normal)
 
