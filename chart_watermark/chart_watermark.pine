@@ -1,0 +1,159 @@
+// Copyright 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//@version=6
+indicator('Chart Watermark', overlay = true)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CHART WATERMARK
+// ═══════════════════════════════════════════════════════════════════════════
+// Displays ticker, timeframe, and description as a watermark at the top of
+// the chart. Properly handles ratio/spread charts (e.g., AMD/SPY) by fetching
+// descriptions for both symbols.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+tickerColor = input.color(color.new(#808080, 30), title = 'Ticker & Timeframe', group = 'Watermark Colors')
+descriptionColor = input.color(color.new(#808080, 50), title = 'Description', group = 'Watermark Colors')
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TIMEFRAME FORMATTING
+// ═══════════════════════════════════════════════════════════════════════════
+// Convert timeframe.period to a compact, readable format like TradingView's default
+
+formatTimeframe() =>
+    tf = timeframe.period
+    if timeframe.isseconds
+        str.tostring(timeframe.multiplier) + "s"
+    else if timeframe.isminutes
+        mins = timeframe.multiplier
+        if mins < 60
+            str.tostring(mins) + "m"
+        else if mins % 60 == 0
+            // Evenly divisible by 60 (e.g., 60, 120, 240)
+            str.tostring(mins / 60) + "H"
+        else
+            // Non-standard like 65m - just show as minutes
+            str.tostring(mins) + "m"
+    else if timeframe.isdaily
+        str.tostring(timeframe.multiplier) + "D"
+    else if timeframe.isweekly
+        str.tostring(timeframe.multiplier) + "W"
+    else if timeframe.ismonthly
+        multiplier = timeframe.multiplier
+        if multiplier == 12
+            "1Y"
+        else if multiplier == 3
+            "1Q"
+        else
+            str.tostring(multiplier) + "M"
+    else
+        tf
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Strip exchange prefix from a symbol (e.g., "AMEX:SPY" -> "SPY")
+stripExchange(sym) =>
+    if str.contains(sym, ":")
+        parts = str.split(sym, ":")
+        array.size(parts) >= 2 ? array.get(parts, 1) : sym
+    else
+        sym
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SPREAD/RATIO CHART DETECTION AND DESCRIPTION HANDLING
+// ═══════════════════════════════════════════════════════════════════════════
+// For spread charts like AMD/SPY, syminfo.description just returns the expression.
+// We need to parse the ticker and fetch descriptions for each symbol individually.
+
+// Detect if this is a spread chart
+isSpread = syminfo.type == "spread"
+
+// Detect spread operator
+detectSpreadOperator(ticker) =>
+    string result = na
+    if str.contains(ticker, "/")
+        result := "/"
+    else if str.contains(ticker, "*")
+        result := "*"
+    else if str.contains(ticker, "-")
+        result := "-"
+    else if str.contains(ticker, "+")
+        result := "+"
+    result
+
+// Get clean ticker for spread charts (strip exchange prefixes)
+getCleanSpreadTicker() =>
+    ticker = syminfo.ticker
+    operator = detectSpreadOperator(ticker)
+    if na(operator)
+        ticker
+    else
+        parts = str.split(ticker, operator)
+        if array.size(parts) >= 2
+            sym1 = stripExchange(array.get(parts, 0))
+            sym2 = stripExchange(array.get(parts, 1))
+            sym1 + operator + sym2
+        else
+            ticker
+
+// Parse spread ticker and get combined description
+getSpreadDescription() =>
+    ticker = syminfo.ticker
+    operator = detectSpreadOperator(ticker)
+    if na(operator)
+        syminfo.description
+    else
+        // Split the ticker by the operator
+        parts = str.split(ticker, operator)
+        if array.size(parts) >= 2
+            sym1 = array.get(parts, 0)
+            sym2 = array.get(parts, 1)
+            // Fetch descriptions for each symbol
+            desc1 = request.security(sym1, timeframe.period, syminfo.description, ignore_invalid_symbol = true)
+            desc2 = request.security(sym2, timeframe.period, syminfo.description, ignore_invalid_symbol = true)
+            // Combine with the same operator for clarity
+            cleanSym1 = stripExchange(sym1)
+            cleanSym2 = stripExchange(sym2)
+            validDesc1 = not na(desc1) and desc1 != "" ? desc1 : cleanSym1
+            validDesc2 = not na(desc2) and desc2 != "" ? desc2 : cleanSym2
+            validDesc1 + " " + operator + " " + validDesc2
+        else
+            syminfo.description
+
+// Get the appropriate ticker (clean for spreads)
+displayTicker = isSpread ? getCleanSpreadTicker() : syminfo.ticker
+
+// Get the appropriate description
+description = isSpread ? getSpreadDescription() : syminfo.description
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WATERMARK DISPLAY
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Build the display text
+tickerLine = displayTicker + ", " + formatTimeframe()
+
+// Create the table only on the last bar
+if barstate.islast
+    var table watermark = table.new(position.top_center, 1, 2, bgcolor = color.new(color.white, 100), border_width = 0)
+    // Row 0: Ticker and timeframe
+    table.cell(watermark, 0, 0, tickerLine, text_color = tickerColor, text_size = size.huge, text_halign = text.align_center)
+    // Row 1: Description
+    table.cell(watermark, 0, 1, description, text_color = descriptionColor, text_size = size.large, text_halign = text.align_center)
