@@ -27,6 +27,8 @@ priority_mode = input.bool(true, title = 'Priority Mode', group = 'Markers', too
 
 // Zone settings
 show_zones = input.bool(true, title = 'Show HVC Zones', group = 'Zones', tooltip = 'Draw horizontal zones marking the high/low range of HVC bars')
+zone_extend_right = input.bool(true, title = 'Extend Zones Right', group = 'Zones', tooltip = 'Extend zones to the right edge of the chart (useful for support/resistance). When disabled, zones have a fixed length.')
+zone_length = input.int(90, title = 'Zone Length (bars)', minval = 1, group = 'Zones', tooltip = 'Number of bars to extend zones when "Extend Zones Right" is disabled')
 zone_color = input.color(color.blue, title = 'Zone Color', group = 'Zones')
 zone_transparency = input.int(95, title = 'Zone Fill Transparency (%)', minval = 0, maxval = 100, group = 'Zones')
 zone_edge_transparency = input.int(80, title = 'Zone Edge Transparency (%)', minval = 0, maxval = 100, group = 'Zones')
@@ -100,8 +102,10 @@ plot(hve_threshold, title = 'HVE Threshold', display = display.data_window)
 if show_zones and is_hvc
     fillColor = color.new(zone_color, zone_transparency)
     edgeColor = color.new(zone_color, zone_edge_transparency)
-    topLine = line.new(bar_index, high, bar_index + 1, high, extend = extend.right, color = edgeColor)
-    bottomLine = line.new(bar_index, low, bar_index + 1, low, extend = extend.right, color = edgeColor)
+    zone_end = zone_extend_right ? bar_index + 1 : bar_index + zone_length
+    zone_extend = zone_extend_right ? extend.right : extend.none
+    topLine = line.new(bar_index, high, zone_end, high, extend = zone_extend, color = edgeColor)
+    bottomLine = line.new(bar_index, low, zone_end, low, extend = zone_extend, color = edgeColor)
     linefill.new(topLine, bottomLine, color = fillColor)
 
 // Show real-time multiplier for current bar
