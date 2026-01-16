@@ -177,8 +177,9 @@ plotshape(series = show_all_time, location = location.abovebar, style = selected
 plotshape(series = show_sma_mult, location = location.abovebar, style = selected_shape, size = size.tiny, color = color_sma_mult, title = 'High Volume (SMA Multiple)')
 
 // Add alerts
-alertcondition(is_all_time_high, title = 'All-Time High Volume', message = 'All-time high volume detected on {{ticker}}')
-alertcondition(show_sma_mult, title = 'High Volume Spike', message = 'High volume spike detected on {{ticker}} - volume is above SMA threshold')
+alertcondition(is_all_time_high, title = 'Highest Volume Ever (Green)', message = 'All-time high volume detected on {{ticker}}')
+alertcondition(show_sma_mult, title = 'High Volume Close (Orange)', message = 'High Volume Close detected on {{ticker}} - volume exceeded SMA threshold')
+alertcondition(is_hvc, title = 'Any HVC (Green or Orange)', message = 'High Volume Close detected on {{ticker}} - either all-time high or SMA threshold exceeded')
 
 // Display current values in data window
 plot(filteredVolume, title = 'Filtered Volume', display = display.data_window)
