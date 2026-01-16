@@ -18,17 +18,31 @@ indicator('Chart Watermark', overlay = true)
 // ═══════════════════════════════════════════════════════════════════════════
 // CHART WATERMARK
 // ═══════════════════════════════════════════════════════════════════════════
-// Displays ticker, timeframe, and description as a watermark at the top of
-// the chart. Properly handles ratio/spread charts (e.g., AMD/SPY) by fetching
-// descriptions for both symbols.
+// Displays ticker, timeframe, and optional description/sector/industry info
+// as a watermark at the top of the chart. Properly handles ratio/spread charts
+// (e.g., AMD/SPY) by fetching info for both symbols.
+//
+// Display modes:
+//   - Description: Shows company name/instrument description
+//   - Sector/Industry: Shows sector and industry (stocks only)
+//   - Both: Shows description on line 2, sector/industry on line 3
+//
+// Note: Sector/Industry data is only available for stocks. For ETFs, crypto,
+// forex, and futures, the indicator will fall back to showing description.
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INPUTS
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Display mode options
+const string DISPLAY_DESCRIPTION = "Description"
+const string DISPLAY_SECTOR = "Sector/Industry"
+const string DISPLAY_BOTH = "Both"
+
+displayMode = input.string(DISPLAY_DESCRIPTION, title = 'Display Mode', options = [DISPLAY_DESCRIPTION, DISPLAY_SECTOR, DISPLAY_BOTH], group = 'Watermark Settings')
 tickerColor = input.color(color.new(#808080, 30), title = 'Ticker & Timeframe', group = 'Watermark Colors')
-descriptionColor = input.color(color.new(#808080, 50), title = 'Description', group = 'Watermark Colors')
+descriptionColor = input.color(color.new(#808080, 50), title = 'Description / Sector', group = 'Watermark Colors')
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TIMEFRAME FORMATTING
@@ -137,11 +151,48 @@ getSpreadDescription() =>
         else
             syminfo.description
 
+// Format sector and industry into a single string
+formatSectorIndustry(sector, industry) =>
+    hasSector = not na(sector) and sector != ""
+    hasIndustry = not na(industry) and industry != ""
+    if hasSector and hasIndustry
+        sector + " | " + industry
+    else if hasSector
+        sector
+    else if hasIndustry
+        industry
+    else
+        ""
+
+// Get sector/industry for spread charts
+getSpreadSectorIndustry() =>
+    ticker = syminfo.ticker
+    operator = detectSpreadOperator(ticker)
+    if na(operator)
+        formatSectorIndustry(syminfo.sector, syminfo.industry)
+    else
+        parts = str.split(ticker, operator)
+        if array.size(parts) >= 2
+            sym1 = array.get(parts, 0)
+            sym2 = array.get(parts, 1)
+            sector1 = request.security(sym1, timeframe.period, syminfo.sector, ignore_invalid_symbol = true)
+            sector2 = request.security(sym2, timeframe.period, syminfo.sector, ignore_invalid_symbol = true)
+            cleanSym1 = stripExchange(sym1)
+            cleanSym2 = stripExchange(sym2)
+            validSector1 = not na(sector1) and sector1 != "" ? sector1 : cleanSym1
+            validSector2 = not na(sector2) and sector2 != "" ? sector2 : cleanSym2
+            validSector1 + " " + operator + " " + validSector2
+        else
+            formatSectorIndustry(syminfo.sector, syminfo.industry)
+
 // Get the appropriate ticker (clean for spreads)
 displayTicker = isSpread ? getCleanSpreadTicker() : syminfo.ticker
 
 // Get the appropriate description
 description = isSpread ? getSpreadDescription() : syminfo.description
+
+// Get sector/industry info
+sectorIndustry = isSpread ? getSpreadSectorIndustry() : formatSectorIndustry(syminfo.sector, syminfo.industry)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // WATERMARK DISPLAY
@@ -150,10 +201,30 @@ description = isSpread ? getSpreadDescription() : syminfo.description
 // Build the display text
 tickerLine = displayTicker + ", " + formatTimeframe()
 
+// Determine what to display based on mode and availability
+// If sector/industry is empty, fall back to description
+hasSectorIndustry = sectorIndustry != ""
+showDescription = displayMode == DISPLAY_DESCRIPTION or displayMode == DISPLAY_BOTH
+showSector = (displayMode == DISPLAY_SECTOR or displayMode == DISPLAY_BOTH) and hasSectorIndustry
+
+// Calculate number of rows needed (1 for ticker + optional description + optional sector)
+numRows = 1 + (showDescription ? 1 : 0) + (showSector ? 1 : 0)
+
+// If user wants sector but it's not available, show description as fallback
+fallbackToDescription = displayMode == DISPLAY_SECTOR and not hasSectorIndustry
+
 // Create the table only on the last bar
 if barstate.islast
-    var table watermark = table.new(position.top_center, 1, 2, bgcolor = color.new(color.white, 100), border_width = 0)
+    var table watermark = table.new(position.top_center, 1, 3, bgcolor = color.new(color.white, 100), border_width = 0)
     // Row 0: Ticker and timeframe
     table.cell(watermark, 0, 0, tickerLine, text_color = tickerColor, text_size = size.huge, text_halign = text.align_center)
-    // Row 1: Description
-    table.cell(watermark, 0, 1, description, text_color = descriptionColor, text_size = size.large, text_halign = text.align_center)
+    // Row 1: Description (if enabled) or fallback
+    if showDescription or fallbackToDescription
+        table.cell(watermark, 0, 1, description, text_color = descriptionColor, text_size = size.large, text_halign = text.align_center)
+    else
+        table.cell(watermark, 0, 1, "", text_color = descriptionColor, text_size = size.large, text_halign = text.align_center)
+    // Row 2: Sector/Industry (if enabled and available)
+    if showSector
+        table.cell(watermark, 0, 2, sectorIndustry, text_color = descriptionColor, text_size = size.large, text_halign = text.align_center)
+    else
+        table.cell(watermark, 0, 2, "", text_color = descriptionColor, text_size = size.large, text_halign = text.align_center)
