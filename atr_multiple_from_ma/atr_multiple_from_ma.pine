@@ -1,0 +1,128 @@
+// Copyright 2025 Major Hayden
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//@version=6
+indicator('ATR% Multiple from MA', shorttitle = 'ATR% Multiple', overlay = true, max_labels_count = 500)
+
+// ═══════════════════════════════════════════════════════════════
+// ATR% MULTIPLE FROM MOVING AVERAGE
+// ═══════════════════════════════════════════════════════════════
+//
+// PURPOSE: Measure stock price extension from its moving average
+// in terms of ATR multiples. Helps identify overextended conditions
+// for scaling out profits or avoiding late entries.
+//
+// FORMULA:
+//   ATR% = ATR / Close Price
+//   % Gain from MA = (Close - MA) / MA
+//   ATR Multiple = (% Gain from MA) / ATR%
+//
+// INTERPRETATION:
+//   7-10x: Consider taking partial profits
+//   >10x: Highly extended, increased risk of pullback
+//
+// CREDITS: Inspired by jfsrev's TradingView indicator concept
+//
+// ═══════════════════════════════════════════════════════════════
+
+// INPUTS - Core Settings
+atrLength = input.int(14, 'ATR Length', minval = 1, group = 'Settings', tooltip = 'Period for Average True Range calculation')
+maLength = input.int(50, 'MA Length', minval = 1, group = 'Settings', tooltip = 'Period for Moving Average calculation')
+
+// INPUTS - Thresholds (Above / Below MA)
+stockAbove = input.int(10, 'Stocks: Above', minval = 1, group = 'Thresholds', inline = 'stocks')
+stockBelow = input.int(4, 'Below', minval = 1, group = 'Thresholds', inline = 'stocks')
+etfAbove = input.int(7, 'ETFs: Above', minval = 1, group = 'Thresholds', inline = 'etfs')
+etfBelow = input.int(4, 'Below', minval = 1, group = 'Thresholds', inline = 'etfs')
+otherAbove = input.int(10, 'Other: Above', minval = 1, group = 'Thresholds', inline = 'other')
+otherBelow = input.int(4, 'Below', minval = 1, group = 'Thresholds', inline = 'other')
+
+// INPUTS - Label Settings
+labelSize = input.string('small', 'Label Size', options = ['auto', 'tiny', 'small', 'normal', 'large', 'huge'], group = 'Labels')
+upperColor = input.color(color.green, 'Colors: Above', group = 'Labels', inline = 'colors')
+lowerColor = input.color(color.red, 'Below', group = 'Labels', inline = 'colors')
+
+
+
+// ═══════════════════════════════════════════════════════════════
+// CALCULATIONS
+// ═══════════════════════════════════════════════════════════════
+
+// Detect instrument type and select appropriate thresholds
+isStock = syminfo.type == "stock"
+isFund = syminfo.type == "fund"
+upperThreshold = isStock ? stockAbove : isFund ? etfAbove : otherAbove
+lowerThreshold = isStock ? stockBelow : isFund ? etfBelow : otherBelow
+
+// Calculate ATR and MA
+atr = ta.atr(atrLength)
+ma = ta.sma(close, maLength)
+
+// ATR% = ATR / Close
+atrPercent = atr / close
+
+// % Gain from MA = (Close - MA) / MA
+gainFromMA = (close - ma) / ma
+
+// ATR Multiple = % Gain from MA / ATR%
+// Simplified: = ((close - ma) / ma) / (atr / close)
+//            = ((close - ma) / ma) * (close / atr)
+atrMultiple = atrPercent != 0 ? gainFromMA / atrPercent : 0
+
+// Check if extended beyond thresholds (above or below MA)
+isExtendedAbove = atrMultiple >= upperThreshold
+isExtendedBelow = atrMultiple <= -lowerThreshold
+
+// ═══════════════════════════════════════════════════════════════
+// VISUALIZATION
+// ═══════════════════════════════════════════════════════════════
+
+// Convert size string to size constant
+getSize(sizeStr) =>
+    switch sizeStr
+        'auto' => size.auto
+        'tiny' => size.tiny
+        'small' => size.small
+        'normal' => size.normal
+        'large' => size.large
+        'huge' => size.huge
+        => size.small
+
+markerSize = getSize(labelSize)
+
+// Show ATR multiple as number label when thresholds exceeded
+if isExtendedAbove
+    label.new(bar_index, high, str.tostring(math.round(atrMultiple)), color = color.new(color.white, 100), textcolor = upperColor, style = label.style_label_down, size = markerSize)
+
+if isExtendedBelow
+    label.new(bar_index, low, str.tostring(math.round(math.abs(atrMultiple))), color = color.new(color.white, 100), textcolor = lowerColor, style = label.style_label_up, size = markerSize)
+
+// ═══════════════════════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════════════════════
+
+alertcondition(isExtendedAbove, title = 'Extended Above MA', message = '{{ticker}} is extended above MA')
+alertcondition(isExtendedAbove and not isExtendedAbove[1], title = 'Became Extended Above', message = '{{ticker}} just became extended above MA')
+alertcondition(isExtendedBelow, title = 'Extended Below MA', message = '{{ticker}} is extended below MA')
+alertcondition(isExtendedBelow and not isExtendedBelow[1], title = 'Became Extended Below', message = '{{ticker}} just became extended below MA')
+
+// ═══════════════════════════════════════════════════════════════
+// DATA WINDOW
+// ═══════════════════════════════════════════════════════════════
+
+plot(atrMultiple, title = 'ATR Multiple', display = display.data_window)
+plot(atrPercent * 100, title = 'ATR%', display = display.data_window)
+plot(gainFromMA * 100, title = '% from MA', display = display.data_window)
+plot(ma, title = 'MA', display = display.data_window)
+plot(atr, title = 'ATR', display = display.data_window)
