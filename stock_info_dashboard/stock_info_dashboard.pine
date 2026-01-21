@@ -1,0 +1,186 @@
+// Copyright 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//@version=6
+indicator("Stock Info Dashboard [thetanerd]", shorttitle = "Info Dashboard", overlay = true)
+
+// =============================================================================
+// STOCK INFO DASHBOARD
+// =============================================================================
+// Displays a horizontal table at the top of the chart with key stock information:
+// - Symbol, Name, Sector
+// - RSI, ADR%, ATR%
+// - Days until next earnings (color-coded)
+//
+// Earnings color coding:
+//   Gray:   Unknown (no earnings date available)
+//   Green:  > 21 days away
+//   Yellow: 8-21 days away
+//   Red:    <= 7 days away
+// =============================================================================
+
+// =============================================================================
+// INPUTS
+// =============================================================================
+
+grpIndicators = "Indicator Settings"
+rsiLength = input.int(14, "RSI Length", minval = 1, group = grpIndicators)
+adrLength = input.int(14, "ADR Length (days)", minval = 1, group = grpIndicators, tooltip = "Number of days to average for ADR%")
+atrLength = input.int(14, "ATR Length", minval = 1, group = grpIndicators)
+
+grpEarnings = "Earnings Countdown"
+earningsRedThreshold = input.int(7, "Red Warning (days)", minval = 1, group = grpEarnings, tooltip = "Show red background when earnings are within this many days")
+earningsYellowThreshold = input.int(21, "Yellow Warning (days)", minval = 1, group = grpEarnings, tooltip = "Show yellow background when earnings are within this many days (but more than red threshold)")
+
+grpDisplay = "Display Settings"
+tablePosition = input.string("top_center", "Table Position", options = ["top_left", "top_center", "top_right"], group = grpDisplay)
+textSize = input.string("small", "Text Size", options = ["tiny", "small", "normal", "large"], group = grpDisplay)
+darkMode = input.bool(false, "Dark Mode", group = grpDisplay)
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+// Convert position string to position constant
+getTablePosition(pos) =>
+    switch pos
+        "top_left" => position.top_left
+        "top_center" => position.top_center
+        "top_right" => position.top_right
+        => position.top_center
+
+// Convert size string to size constant
+getTextSize(sz) =>
+    switch sz
+        "tiny" => size.tiny
+        "small" => size.small
+        "normal" => size.normal
+        "large" => size.large
+        => size.small
+
+// Get instrument type display name for non-stocks
+getTypeDisplay() =>
+    switch syminfo.type
+        "stock" => syminfo.sector != "" ? syminfo.sector : "Stock"
+        "fund" => "ETF"
+        "dr" => "ADR"
+        "crypto" => "Crypto"
+        "forex" => "Forex"
+        "futures" => "Futures"
+        "index" => "Index"
+        "bond" => "Bond"
+        "warrant" => "Warrant"
+        "structured" => "Structured"
+        "right" => "Right"
+        "cfd" => "CFD"
+        => syminfo.type
+
+// =============================================================================
+// CALCULATIONS
+// =============================================================================
+
+// RSI
+rsiValue = ta.rsi(close, rsiLength)
+
+// ATR% (ATR as percentage of price)
+atrValue = ta.atr(atrLength)
+atrPercent = (atrValue / close) * 100
+
+// ADR% (Average Daily Range as percentage of price)
+// Use request.security to get daily high/low data
+dailyHigh = request.security(syminfo.tickerid, "D", high, barmerge.gaps_off, barmerge.lookahead_on)
+dailyLow = request.security(syminfo.tickerid, "D", low, barmerge.gaps_off, barmerge.lookahead_on)
+dailyRange = dailyHigh - dailyLow
+adrValue = ta.sma(dailyRange, adrLength)
+adrPercent = (adrValue / close) * 100
+
+// Earnings countdown
+earningsTime = earnings.future_time
+daysUntilEarnings = na(earningsTime) ? na : (earningsTime - time) / (24 * 60 * 60 * 1000)
+
+// 52-week high/low distance
+week52High = ta.highest(high, 252)
+week52Low = ta.lowest(low, 252)
+pctFromHigh = ((close - week52High) / week52High) * 100
+pctFromLow = ((close - week52Low) / week52Low) * 100
+week52Text = str.tostring(pctFromHigh, "#") + "% / +" + str.tostring(pctFromLow, "#") + "%"
+
+// Earnings display with traffic light emoji
+var string earningsText = "⚪ Unknown"
+
+if na(daysUntilEarnings)
+    earningsText := "⚪ Unknown"
+else if daysUntilEarnings > earningsYellowThreshold
+    earningsText := "🟢 " + str.format("{0,number,integer}d", daysUntilEarnings)
+else if daysUntilEarnings > earningsRedThreshold
+    earningsText := "🟡 " + str.format("{0,number,integer}d", daysUntilEarnings)
+else if daysUntilEarnings < 1
+    earningsText := "🔴 Today!"
+else if daysUntilEarnings < 2
+    earningsText := "🔴 Tomorrow"
+else
+    earningsText := "🔴 " + str.format("{0,number,integer}d", daysUntilEarnings)
+
+// Symbol info
+tickerSymbol = syminfo.ticker
+tickerName = syminfo.description
+tickerSector = getTypeDisplay()
+
+// =============================================================================
+// TABLE DISPLAY
+// =============================================================================
+
+tableBgColor = darkMode ? color.new(color.black, 20) : color.new(color.white, 20)
+tableBorderColor = darkMode ? color.gray : color.new(#cccccc, 0)
+var table infoTable = table.new(getTablePosition(tablePosition), 8, 2, bgcolor = tableBgColor, border_width = 1, border_color = tableBorderColor)
+
+tSize = getTextSize(textSize)
+
+// Light/Dark mode colors
+headerColor = darkMode ? color.new(color.gray, 0) : color.new(#e0e0e0, 0)
+headerTextColor = darkMode ? color.white : color.black
+valueTextColor = darkMode ? color.white : color.black
+valueBgColor = darkMode ? color.new(color.black, 40) : color.new(color.white, 0)
+
+if barstate.islast
+    // Row 0: Headers
+    table.cell(infoTable, 0, 0, "Symbol", bgcolor = headerColor, text_color = headerTextColor, text_size = tSize)
+    table.cell(infoTable, 1, 0, "Name", bgcolor = headerColor, text_color = headerTextColor, text_size = tSize)
+    table.cell(infoTable, 2, 0, "Sector", bgcolor = headerColor, text_color = headerTextColor, text_size = tSize)
+    table.cell(infoTable, 3, 0, "RSI(" + str.tostring(rsiLength) + ")", bgcolor = headerColor, text_color = headerTextColor, text_size = tSize)
+    table.cell(infoTable, 4, 0, "ADR%", bgcolor = headerColor, text_color = headerTextColor, text_size = tSize)
+    table.cell(infoTable, 5, 0, "ATR%", bgcolor = headerColor, text_color = headerTextColor, text_size = tSize)
+    table.cell(infoTable, 6, 0, "52w H/L", bgcolor = headerColor, text_color = headerTextColor, text_size = tSize)
+    table.cell(infoTable, 7, 0, "Earnings", bgcolor = headerColor, text_color = headerTextColor, text_size = tSize)
+
+    // Row 1: Values
+    table.cell(infoTable, 0, 1, tickerSymbol, bgcolor = valueBgColor, text_color = valueTextColor, text_size = tSize)
+    table.cell(infoTable, 1, 1, tickerName, bgcolor = valueBgColor, text_color = valueTextColor, text_size = tSize)
+    table.cell(infoTable, 2, 1, tickerSector, bgcolor = valueBgColor, text_color = valueTextColor, text_size = tSize)
+    table.cell(infoTable, 3, 1, str.tostring(rsiValue, "#.#"), bgcolor = valueBgColor, text_color = valueTextColor, text_size = tSize)
+    table.cell(infoTable, 4, 1, str.tostring(adrPercent, "#.##") + "%", bgcolor = valueBgColor, text_color = valueTextColor, text_size = tSize)
+    table.cell(infoTable, 5, 1, str.tostring(atrPercent, "#.##") + "%", bgcolor = valueBgColor, text_color = valueTextColor, text_size = tSize)
+    table.cell(infoTable, 6, 1, week52Text, bgcolor = valueBgColor, text_color = valueTextColor, text_size = tSize)
+    table.cell(infoTable, 7, 1, earningsText, bgcolor = valueBgColor, text_color = valueTextColor, text_size = tSize)
+
+// =============================================================================
+// DATA WINDOW
+// =============================================================================
+
+plot(rsiValue, title = "RSI", display = display.data_window)
+plot(adrPercent, title = "ADR%", display = display.data_window)
+plot(atrPercent, title = "ATR%", display = display.data_window)
+plot(pctFromHigh, title = "% from 52w High", display = display.data_window)
+plot(pctFromLow, title = "% from 52w Low", display = display.data_window)
+plot(daysUntilEarnings, title = "Days to Earnings", display = display.data_window)
