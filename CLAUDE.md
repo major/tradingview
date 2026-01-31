@@ -50,11 +50,13 @@ Key functions frequently used:
 ## Testing Indicators
 
 To test a Pine Script indicator:
-1. Copy the complete script content
+1. Copy the indicator to clipboard: `cat path/to/indicator.pine | wl-copy`
 2. Open TradingView chart
 3. Open Pine Editor
-4. Paste the script
+4. Paste the script (Ctrl+V)
 5. Click "Add to Chart"
+
+**Development workflow**: When developing or iterating on indicators, always copy to clipboard with `wl-copy` after each change for quick testing in TradingView.
 
 ## License
 
