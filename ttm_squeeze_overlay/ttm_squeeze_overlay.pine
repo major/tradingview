@@ -19,6 +19,10 @@ indicator('TTM Squeeze Overlay', shorttitle = 'TTM Squeeze', overlay = true)
 squeezeOnColor = input.color(color.black, title = 'Squeeze ON Color', group = 'Colors')
 squeezeFiresColor = input.color(color.green, title = 'Squeeze Fires Color', group = 'Colors')
 
+// Size input
+sizeOption = input.string('Small', title = 'Circle Size', options = ['Tiny', 'Small', 'Normal', 'Large', 'Huge'], group = 'Display')
+circleSize = sizeOption == 'Tiny' ? size.tiny : sizeOption == 'Small' ? size.small : sizeOption == 'Normal' ? size.normal : sizeOption == 'Large' ? size.large : size.huge
+
 // TTM Squeeze calculation
 // Bollinger Bands: 20 period SMA, 2.0 std dev
 basis = ta.sma(close, 20)
@@ -41,8 +45,8 @@ squeezeFires = wasSqueezeOn and not squeezeOn
 wasSqueezeOn := squeezeOn
 
 // Plot shapes
-plotshape(squeezeOn, title = 'Squeeze ON', style = shape.circle, location = location.belowbar, color = squeezeOnColor, size = size.small)
-plotshape(squeezeFires, title = 'Squeeze Fires', style = shape.circle, location = location.belowbar, color = squeezeFiresColor, size = size.small)
+plotshape(squeezeOn, title = 'Squeeze ON', style = shape.circle, location = location.belowbar, color = squeezeOnColor, size = circleSize)
+plotshape(squeezeFires, title = 'Squeeze Fires', style = shape.circle, location = location.belowbar, color = squeezeFiresColor, size = circleSize)
 
 // Alert condition
 alertcondition(squeezeFires, title = 'TTM Squeeze Fires', message = 'TTM Squeeze fired on {{ticker}}')
