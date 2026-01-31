@@ -21,7 +21,6 @@ squeezeFiresColor = input.color(color.green, title = 'Squeeze Fires Color', grou
 
 // Size input
 sizeOption = input.string('Small', title = 'Circle Size', options = ['Tiny', 'Small', 'Normal', 'Large', 'Huge'], group = 'Display')
-circleSize = sizeOption == 'Tiny' ? size.tiny : sizeOption == 'Small' ? size.small : sizeOption == 'Normal' ? size.normal : sizeOption == 'Large' ? size.large : size.huge
 
 // TTM Squeeze calculation
 // Bollinger Bands: 20 period SMA, 2.0 std dev
@@ -44,9 +43,18 @@ var bool wasSqueezeOn = false
 squeezeFires = wasSqueezeOn and not squeezeOn
 wasSqueezeOn := squeezeOn
 
-// Plot shapes
-plotshape(squeezeOn, title = 'Squeeze ON', style = shape.circle, location = location.belowbar, color = squeezeOnColor, size = circleSize)
-plotshape(squeezeFires, title = 'Squeeze Fires', style = shape.circle, location = location.belowbar, color = squeezeFiresColor, size = circleSize)
+// Plot shapes - conditional on size selection
+plotshape(sizeOption == 'Tiny' ? squeezeOn : na, title = 'Squeeze ON (Tiny)', style = shape.circle, location = location.belowbar, color = squeezeOnColor, size = size.tiny)
+plotshape(sizeOption == 'Small' ? squeezeOn : na, title = 'Squeeze ON (Small)', style = shape.circle, location = location.belowbar, color = squeezeOnColor, size = size.small)
+plotshape(sizeOption == 'Normal' ? squeezeOn : na, title = 'Squeeze ON (Normal)', style = shape.circle, location = location.belowbar, color = squeezeOnColor, size = size.normal)
+plotshape(sizeOption == 'Large' ? squeezeOn : na, title = 'Squeeze ON (Large)', style = shape.circle, location = location.belowbar, color = squeezeOnColor, size = size.large)
+plotshape(sizeOption == 'Huge' ? squeezeOn : na, title = 'Squeeze ON (Huge)', style = shape.circle, location = location.belowbar, color = squeezeOnColor, size = size.huge)
+
+plotshape(sizeOption == 'Tiny' ? squeezeFires : na, title = 'Squeeze Fires (Tiny)', style = shape.circle, location = location.belowbar, color = squeezeFiresColor, size = size.tiny)
+plotshape(sizeOption == 'Small' ? squeezeFires : na, title = 'Squeeze Fires (Small)', style = shape.circle, location = location.belowbar, color = squeezeFiresColor, size = size.small)
+plotshape(sizeOption == 'Normal' ? squeezeFires : na, title = 'Squeeze Fires (Normal)', style = shape.circle, location = location.belowbar, color = squeezeFiresColor, size = size.normal)
+plotshape(sizeOption == 'Large' ? squeezeFires : na, title = 'Squeeze Fires (Large)', style = shape.circle, location = location.belowbar, color = squeezeFiresColor, size = size.large)
+plotshape(sizeOption == 'Huge' ? squeezeFires : na, title = 'Squeeze Fires (Huge)', style = shape.circle, location = location.belowbar, color = squeezeFiresColor, size = size.huge)
 
 // Alert condition
 alertcondition(squeezeFires, title = 'TTM Squeeze Fires', message = 'TTM Squeeze fired on {{ticker}}')
