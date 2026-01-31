@@ -1,0 +1,48 @@
+// Copyright 2026 Major Hayden
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//@version=6
+indicator('TTM Squeeze Overlay', shorttitle = 'TTM Squeeze', overlay = true)
+
+// Color inputs
+squeezeOnColor = input.color(color.black, title = 'Squeeze ON Color', group = 'Colors')
+squeezeFiresColor = input.color(color.green, title = 'Squeeze Fires Color', group = 'Colors')
+
+// TTM Squeeze calculation
+// Bollinger Bands: 20 period SMA, 2.0 std dev
+basis = ta.sma(close, 20)
+bbDev = ta.stdev(close, 20) * 2.0
+bbUpper = basis + bbDev
+bbLower = basis - bbDev
+
+// Keltner Channels: 20 period EMA, 1.5 ATR
+kcBasis = ta.ema(close, 20)
+kcRange = ta.atr(20) * 1.5
+kcUpper = kcBasis + kcRange
+kcLower = kcBasis - kcRange
+
+// Squeeze detection: BB inside KC
+squeezeOn = bbLower > kcLower and bbUpper < kcUpper
+
+// State machine for detecting fires (ON → OFF transition)
+var bool wasSqueezeOn = false
+squeezeFires = wasSqueezeOn and not squeezeOn
+wasSqueezeOn := squeezeOn
+
+// Plot shapes
+plotshape(squeezeOn, title = 'Squeeze ON', style = shape.circle, location = location.belowbar, color = squeezeOnColor, size = size.small)
+plotshape(squeezeFires, title = 'Squeeze Fires', style = shape.circle, location = location.belowbar, color = squeezeFiresColor, size = size.small)
+
+// Alert condition
+alertcondition(squeezeFires, title = 'TTM Squeeze Fires', message = 'TTM Squeeze fired on {{ticker}}')
