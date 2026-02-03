@@ -1,0 +1,38 @@
+// Copyright 2025 Major Hayden
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//@version=6
+indicator('Volume Percent of MA', shorttitle='Vol % MA', format=format.volume, overlay=false)
+
+// User inputs
+maLength = input.int(20, 'MA Length', minval=1)
+maType = input.string('SMA', 'MA Type', options=['SMA', 'EMA'])
+minPercent = input.int(100, 'Minimum % to Display', minval=100, step=10, tooltip='Bars below this percentage are hidden (100 = show all above MA)')
+useIBDColoring = input.bool(true, 'Color based on previous close', tooltip='Color based on previous bar close instead of current bar open')
+chartTheme = input.string('Dark', 'Chart Theme', options=['Light', 'Dark'], tooltip='Select your chart background theme for proper color visibility')
+
+// MA Calculation
+ma = maType == 'SMA' ? ta.sma(volume, maLength) : ta.ema(volume, maLength)
+
+// Percentage Calculation (only when volume > MA and meets minimum threshold, otherwise na = hidden)
+volumePercent = volume > ma and ma > 0 and (volume / ma) * 100 >= minPercent ? (volume / ma) * 100 : na
+
+// Color Logic
+priceUp = useIBDColoring ? close >= close[1] : close >= open
+upColor = chartTheme == 'Light' ? color.black : color.gray
+downColor = color.red
+barColor = priceUp ? upColor : downColor
+
+// Plot
+plot(volumePercent, style=plot.style_columns, color=barColor, linewidth=1, title='Volume %')
