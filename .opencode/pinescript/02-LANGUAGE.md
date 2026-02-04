@@ -40,13 +40,15 @@ x += 1       // Shorthand (also -=, *=, /=, %=)
 | Mode | Behavior | Use Case |
 |------|----------|----------|
 | (none) | Reinitialize every bar | Default, most calculations |
-| `var` | Initialize once, persist | Counters, state tracking |
-| `varip` | Persist across realtime ticks | Tick counting (causes repainting!) |
+| `var` | Initialize once, persist across bars | Counters, state tracking, running totals |
+| `varip` | Persist across realtime ticks AND bars | Tick counting (⚠️ **causes repainting!**) |
+
+**Important**: `varip` causes **repainting** because the value changes during the realtime bar as new ticks arrive, then locks in when the bar closes. Historical bars show the final closed value, not the intermediate tick values. Use only when tick-level precision is essential.
 
 ```pine
-counter = 0           // Always 0
-var counter2 = 0      // Increments: 1, 2, 3...
-varip counter3 = 0    // Counts every tick (WARNING: repaints)
+counter = 0           // Always 0 (reinitializes each bar)
+var counter2 = 0      // Increments: 1, 2, 3... (persists across bars)
+varip counter3 = 0    // Counts every tick (WARNING: repaints during realtime bar)
 ```
 
 ## Operators
@@ -56,9 +58,11 @@ varip counter3 = 0    // Counts every tick (WARNING: repaints)
 a + b    // Addition (also string concatenation)
 a - b    // Subtraction
 a * b    // Multiplication
-a / b    // Division
+a / b    // Division (returns float: 5 / 2 = 2.5, not 2)
 a % b    // Modulo (remainder)
 ```
+
+**Division Note**: Pine Script division always returns a float, even when dividing integers. If you need integer division, use `int(a / b)` to truncate.
 
 ### Comparison
 ```pine
@@ -84,6 +88,24 @@ result = condition ? valueIfTrue : valueIfFalse
 // Nested (avoid when possible)
 result = cond1 ? val1 : cond2 ? val2 : val3
 ```
+
+### Operator Precedence
+
+Operators are evaluated in this order (highest to lowest precedence). Operators on the same level are evaluated left-to-right.
+
+| Precedence | Operators | Type |
+|-----------|-----------|------|
+| 1 (Highest) | `[]` | History reference, array/map indexing |
+| 2 | `.` | Method call, field access |
+| 3 | `not` | Logical NOT |
+| 4 | `*`, `/`, `%` | Multiplication, division, modulo |
+| 5 | `+`, `-` | Addition, subtraction |
+| 6 | `<`, `<=`, `>`, `>=` | Comparison |
+| 7 | `==`, `!=` | Equality |
+| 8 | `and` | Logical AND |
+| 9 (Lowest) | `or` | Logical OR |
+
+**Example**: `a + b * c` evaluates as `a + (b * c)` because `*` has higher precedence than `+`.
 
 ### History Reference
 ```pine
@@ -134,7 +156,7 @@ action = switch myInput
 
 ### Restrictions in Conditionals
 These functions CANNOT be called inside if/switch blocks:
-- `plot()`, `plotshape()`, `plotchar()`, `plotarrow()`
+- `plot()`, `plotshape()`, `plotchar()`, `plotarrow()`, `plotcandle()`, `plotbar()`
 - `barcolor()`, `bgcolor()`, `fill()`
 - `hline()`, `alertcondition()`
 - `indicator()`, `strategy()`, `library()`
@@ -195,6 +217,30 @@ for i = 0 to 9
         break     // Exit loop entirely
 ```
 
+### Critical: var/varip with Loops
+
+⚠️ **IMPORTANT**: When a loop is initialized with `var` or `varip`, it **exits after 1 iteration** on subsequent bars!
+
+```pine
+// WRONG: Loop only runs once after first bar
+var sum = 0.0
+for i = 0 to 9
+    sum += close[i]  // Only executes on first bar, then exits!
+
+// CORRECT: Reinitialize loop variable each bar
+sum = 0.0
+for i = 0 to 9
+    sum += close[i]  // Runs fully every bar
+
+// CORRECT: Use var for accumulation, not loop
+var sum = 0.0
+sum += close[0]  // Add current bar's close each bar
+```
+
+**Why this happens**: The `var` keyword persists the loop's internal state. Once the loop completes, its state is "done", so it doesn't re-enter on subsequent bars.
+
+**Workaround**: If you need to accumulate values across bars, use `var` on the accumulator variable, not the loop itself.
+
 ### When to Use Loops
 
 **Prefer built-ins** when available:
@@ -212,7 +258,7 @@ avg = ta.sma(close, length)
 **Use loops for**:
 - Iterating collections (arrays, maps, matrices)
 - Custom calculations not in built-ins
-- Variable lookback based on runtime conditions
+- Variable lookback based on runtime conditions (e.g., `for i = 0 to userLength`)
 
 ## User-Defined Functions
 
