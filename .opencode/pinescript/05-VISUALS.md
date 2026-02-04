@@ -20,7 +20,8 @@ plot(
     display = display.all,          // Where to display
     format = format.inherit,        // Number format
     precision = na,                 // Decimal places
-    force_overlay = false           // Force on price chart
+    force_overlay = false,          // Force on price chart
+    linestyle = plot.linestyle_solid // solid, dashed, dotted
 )
 ```
 
@@ -38,6 +39,14 @@ plot.style_areabr        // Area with breaks
 plot.style_columns       // Column bars
 plot.style_circles       // Circle markers
 plot.style_cross         // Cross markers
+```
+
+### Line Styles (for linestyle parameter)
+
+```pine
+plot.linestyle_solid     // ─────────
+plot.linestyle_dashed    // ┄┄┄┄┄┄┄┄┄
+plot.linestyle_dotted    // ┈ ┈ ┈ ┈ ┈
 ```
 
 ### Display Options
@@ -67,7 +76,8 @@ plotshape(
     textcolor = color.white,
     offset = 0,
     editable = true,
-    display = display.all
+    display = display.all,
+    force_overlay = false
 )
 ```
 
@@ -189,18 +199,18 @@ barcolor(close > ta.sma(close, 20) ? color.green : color.red)
 
 ## fill()
 
-Fill area between two plots or lines.
+Fill area between two plots or lines. **Note:** You cannot mix plot and hline IDs in the same `fill()` call.
 
 ```pine
 // Between plots
 p1 = plot(upperBand)
 p2 = plot(lowerBand)
-fill(p1, p2, color=color.new(color.blue, 80))
+fill(p1, p2, color=color.new(color.blue, 80), title="Band Fill", fillgaps=true)
 
 // Between hlines
 h1 = hline(70)
 h2 = hline(30)
-fill(h1, h2, color=color.new(color.purple, 90))
+fill(h1, h2, color=color.new(color.purple, 90), title="Level Fill")
 ```
 
 ## Lines
@@ -215,8 +225,15 @@ var line myLine = line.new(
     extend = extend.none,           // extend.none, .left, .right, .both
     color = color.blue,
     style = line.style_solid,       // See styles below
-    width = 1
+    width = 1,
+    force_overlay = false
 )
+
+// Using chart.point
+p1 = chart.point.from_index(bar_index[10], low[10])
+p2 = chart.point.now(high)
+myLine2 = line.new(p1, p2, color=color.red)
+```
 
 // Styles
 line.style_solid
@@ -225,18 +242,43 @@ line.style_dashed
 line.style_arrow_left
 line.style_arrow_right
 line.style_arrow_both
-```
 
 ### Line Updates
 
 ```pine
 line.set_xy1(myLine, x1, y1)        // Move start point
 line.set_xy2(myLine, x2, y2)        // Move end point
+line.set_first_point(myLine, p1)    // Update using chart.point
 line.set_color(myLine, color.red)
 line.set_width(myLine, 2)
 line.set_style(myLine, line.style_dashed)
 line.set_extend(myLine, extend.right)
 line.delete(myLine)                 // Remove line
+```
+
+## Polylines
+
+Polylines connect multiple points with line segments.
+
+### polyline.new()
+
+```pine
+var array<chart.point> points = array.new<chart.point>()
+if barstate.isfirst
+    points.push(chart.point.from_index(bar_index, low))
+    points.push(chart.point.from_index(bar_index + 10, high))
+    points.push(chart.point.from_index(bar_index + 20, low))
+
+var polyline myPoly = polyline.new(
+    points,
+    closed = false,                 // Connect last point to first
+    line_color = color.blue,
+    fill_color = color.new(color.blue, 80),
+    line_style = line.style_solid,
+    line_width = 1,
+    xloc = xloc.bar_index,
+    force_overlay = false
+)
 ```
 
 ## Boxes
@@ -257,8 +299,14 @@ var box myBox = box.new(
     text_size = size.normal,
     text_color = color.white,
     text_halign = text.align_center,
-    text_valign = text.align_center
+    text_valign = text.align_center,
+    force_overlay = false
 )
+
+// Using chart.point
+p1 = chart.point.from_index(bar_index[10], high[10])
+p2 = chart.point.now(low)
+myBox2 = box.new(p1, p2, bgcolor=color.new(color.red, 80))
 ```
 
 ### Box Updates
@@ -288,31 +336,11 @@ var label myLabel = label.new(
     size = size.normal,
     textalign = text.align_center,
     tooltip = "",
-    text_font_family = font.family_default
+    text_font_family = font.family_default,
+    force_overlay = false
 )
-
-// Label styles
-label.style_none
-label.style_label_up
-label.style_label_down
-label.style_label_left
-label.style_label_right
-label.style_label_center
-label.style_label_lower_left
-label.style_label_lower_right
-label.style_label_upper_left
-label.style_label_upper_right
-label.style_xcross
-label.style_cross
-label.style_circle
-label.style_square
-label.style_diamond
-label.style_triangleup
-label.style_triangledown
-label.style_arrowup
-label.style_arrowdown
-label.style_flag
 ```
+
 
 ### Label Updates
 
@@ -371,6 +399,12 @@ table.cell(
     tooltip = "",
     text_font_family = font.family_default
 )
+
+// Merge cells
+table.merge_cells(myTable, 0, 0, 1, 0) // Merge first two columns in first row
+
+// Set text formatting
+table.cell_set_text_formatting(myTable, 0, 0, text.format_bold)
 ```
 
 ### Table Pattern (Update on Last Bar Only)
@@ -409,6 +443,12 @@ myColor = color.rgb(255, 100, 50, 20)  // Last param = transparency
 
 // Gradient based on value
 myColor = color.from_gradient(rsi, 30, 70, color.red, color.green)
+
+// Extract components
+r = color.r(myColor)
+g = color.g(myColor)
+b = color.b(myColor)
+t = color.t(myColor)
 ```
 
 ### Dynamic Colors
@@ -465,6 +505,37 @@ if not na(pivotLow)
         line.delete(supportLine)
     supportLine := line.new(bar_index - 5, support, bar_index, support, 
                            extend=extend.right, color=color.green, style=line.style_dashed)
+```
+
+## Drawing Limits
+
+Scripts have limits on the number of drawing objects they can display.
+
+| Object Type | Default Limit | Maximum Limit |
+|-------------|---------------|---------------|
+| Lines       | ~50           | 500           |
+| Boxes       | ~50           | 500           |
+| Labels      | ~50           | 500           |
+| Polylines   | ~50           | 100           |
+
+Set limits in `indicator()` or `strategy()`:
+```pine
+indicator("My Script", max_lines_count = 500, max_labels_count = 500, max_boxes_count = 500, max_polylines_count = 100)
+```
+
+## Conditional Plotting
+
+Since `plot()` cannot be used inside `if` blocks, use `na` to control visibility.
+
+```pine
+// Plot only when RSI is above 70
+plot(rsi > 70 ? rsi : na, color=color.red, style=plot.style_circles)
+
+// Change color conditionally
+plot(close, color = close > open ? color.green : color.red)
+
+// Hide plot by setting color to na
+plot(close, color = hidePlot ? na : color.blue)
 ```
 
 ## Horizontal Levels (hline)

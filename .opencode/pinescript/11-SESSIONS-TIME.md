@@ -1,118 +1,110 @@
 # Pine Script v6 Sessions & Time Reference
 
+## Timeframes
+
+### Timeframe Strings
+Timeframe strings (also called *intervals* or *resolutions*) define the unit of time represented by one bar. They are used in `request.security()`, `time()`, `time_close()`, and `input.timeframe()`.
+
+#### Format
+```
+[Multiplier][Unit]
+```
+- **Multiplier**: An optional integer. If omitted, `1` is assumed.
+- **Unit**: A single letter representing the time unit.
+
+| Unit | Description | Valid Multipliers | Example |
+|------|-------------|-------------------|---------|
+| (none)| Minutes | 1 to 1440 | `"1"`, `"60"`, `"240"` |
+| `S` | Seconds | 1, 5, 10, 15, 30, 45 | `"1S"`, `"30S"` |
+| `D` | Days | 1 to 365 | `"1D"`, `"3D"` |
+| `W` | Weeks | 1 to 52 | `"1W"`, `"2W"` |
+| `M` | Months | 1 to 12 | `"1M"`, `"3M"` |
+| `T` | Ticks | 1, 10, 100, 1000 | `"1T"`, `"100T"` |
+
+**Note**: There is no `"H"` unit for hours. Use minutes instead (e.g., `"60"` for 1 hour, `"120"` for 2 hours).
+
+### Using Timeframes
+```pine
+//@version=6
+indicator("Timeframe Example")
+
+// Get current timeframe
+currentTF = timeframe.period // Returns "1D", "60", etc.
+
+// Request data from a higher timeframe
+dailyClose = request.security(syminfo.tickerid, "1D", close)
+
+// Check if current timeframe is intraday
+isIntraday = timeframe.isintraday
+```
+
+---
+
 ## Session Strings
 
 ### Format
 ```
 HHMM-HHMM:DAYS
 ```
-
-- `HHMM`: 24-hour time (0000-2359)
-- `DAYS`: 1=Sunday, 2=Monday, ... 7=Saturday
+- `HHMM`: 24-hour time (0000-2359).
+- `DAYS`: 1=Sunday, 2=Monday, 3=Tuesday, 4=Wednesday, 5=Thursday, 6=Friday, 7=Saturday.
+- **Multiple Periods**: Discrete time periods can be comma-separated.
 
 ### Examples
 ```pine
 "0930-1600:23456"     // Mon-Fri 9:30 AM - 4:00 PM
-"1700-1700:23456"     // Overnight session (5 PM to 5 PM next day)
+"0800-0900,1300-1700" // Two discrete periods, every day (default 1234567)
+"1700-1700:23456"     // Overnight session (5 PM to 5 PM next day), Mon-Fri
 "0000-0000:1234567"   // 24/7
 "24x7"                // Shorthand for 24/7
 ```
 
-### Using Sessions
+### Named Sessions
+Exchanges define specific named sessions for symbols.
+- `"regular"`: Regular trading hours.
+- `"extended"`: Extended hours (includes pre-market and post-market).
+- `"premarket"`: Pre-market only.
+- `"postmarket"`: Post-market only.
+
+**Critical Note**: `request.*()` functions (like `request.security()`) **only** support named sessions via `ticker.new()`. They do **not** support custom time-based session strings.
+
+---
+
+## Time Handling
+
+### UNIX Timestamps
+Pine Script uses UNIX timestamps in **milliseconds** since the Epoch (1970-01-01 00:00:00 UTC).
+- Timestamps are **time zone-agnostic**; they represent an absolute point in time.
+- `time`: Opening time of the current bar.
+- `time_close`: Closing time of the current bar.
+- `timenow`: Current real-world time. **Warning**: Using `timenow` causes repainting as its value changes with every update.
+
+### Timezone Contexts
+1. **Exchange Timezone**: Accessed via `syminfo.timezone`. Calendar variables (`hour`, `dayofweek`, etc.) use this by default.
+2. **Chart Timezone**: A visual preference set by the user. Scripts **cannot** access this value.
+3. **Function Parameter**: Many time functions accept a `timezone` string (e.g., `"America/New_York"`, `"UTC+5"`).
+
+### Time Functions
+
+#### timestamp()
+Creates a UNIX timestamp from calendar components.
 ```pine
-//@version=6
-indicator("Session Example", overlay=true)
-
-// Define session
-usSession = "0930-1600:23456"
-
-// Check if bar is in session
-inSession = not na(time(timeframe.period, usSession))
-
-bgcolor(inSession ? color.new(color.blue, 90) : na)
+// timestamp([timezone], year, month, day, hour, minute, second)
+ts = timestamp("America/New_York", 2024, 01, 01, 09, 30, 00)
 ```
 
-## Session Functions
-
-### time() with Session
+#### time() and time_close()
+Used to check sessions or retrieve times from other bars.
 ```pine
-// Returns bar time if in session, na otherwise
-sessionTime = time(timeframe.period, "0930-1600:23456")
-inSession = not na(sessionTime)
+// time(timeframe, session, [timezone])
+inSession = not na(time(timeframe.period, "0930-1600:23456"))
+
+// bars_back: Use negative values to look into the FUTURE (up to -500)
+futureTime = time(timeframe.period, bars_back = -10) 
 ```
 
-### time_close() with Session
-```pine
-// Returns bar close time if in session
-sessionCloseTime = time_close(timeframe.period, "0930-1600:23456")
-```
-
-### User Input for Session
-```pine
-sessionInput = input.session("0930-1600", "Trading Session")
-inSession = not na(time(timeframe.period, sessionInput))
-```
-
-## Named Sessions
-
-### Exchange-Defined Sessions
-```pine
-"regular"     // Regular trading hours
-"extended"    // Extended hours (pre + post)
-"premarket"   // Pre-market only
-"postmarket"  // Post-market only
-```
-
-### Using Named Sessions
-```pine
-// Get current symbol's session type
-currentSession = syminfo.session  // Returns session.regular, etc.
-
-// Create ticker for different session
-extendedTicker = ticker.new(syminfo.prefix, syminfo.ticker, session.extended)
-extendedClose = request.security(extendedTicker, timeframe.period, close)
-```
-
-## Session State Detection
-
-### Built-in States
-```pine
-session.ismarket      // In regular market hours
-session.ispremarket   // In pre-market
-session.ispostmarket  // In post-market
-```
-
-```pine
-//@version=6
-indicator("Session States")
-
-plot(session.ismarket ? 1 : 0, "Market Hours")
-bgcolor(session.ispremarket ? color.new(color.yellow, 90) : na)
-bgcolor(session.ispostmarket ? color.new(color.orange, 90) : na)
-```
-
-### Detecting Session Changes
-```pine
-// New trading day started
-newDay = ta.change(time("D"))
-
-// New session started
-newSession = ta.change(time(timeframe.period, "0930-1600:23456"))
-
-if newSession
-    label.new(bar_index, high, "Session Start")
-```
-
-## Time Functions
-
-### Current Time
-```pine
-time          // Bar open time (Unix ms)
-time_close    // Bar close time (Unix ms)
-timenow       // Current real-world time (Unix ms) - WARNING: causes repainting!
-```
-
-### Time Components
+#### Time Components
+Functions to extract parts of a timestamp. They accept an optional `timezone`.
 ```pine
 year(time)           // Year (e.g., 2024)
 month(time)          // Month (1-12)
@@ -123,17 +115,20 @@ minute(time)         // Minute (0-59)
 second(time)         // Second (0-59)
 ```
 
-### Timezone Handling
+---
+
+## Advanced Patterns
+
+### Dynamic Sessions
+You can calculate session strings dynamically based on conditions.
 ```pine
-// Specify timezone for time functions
-hour(time, "America/New_York")
-hour(time, syminfo.timezone)
-
-// Get timezone info
-syminfo.timezone  // Symbol's timezone string
+//@version=6
+indicator("Dynamic Session")
+// Use different hours for Monday vs other days
+sessionStr = (dayofweek == dayofweek.monday) ? "1000-1600" : "0900-1600"
+inSession = not na(time(timeframe.period, sessionStr))
+bgcolor(inSession ? color.new(color.green, 90) : na)
 ```
-
-## Common Patterns
 
 ### Session High/Low
 ```pine
@@ -158,27 +153,7 @@ plot(sessionHigh, "Session High", color.green, style=plot.style_stepline)
 plot(sessionLow, "Session Low", color.red, style=plot.style_stepline)
 ```
 
-### Previous Day's OHLC
-```pine
-//@version=6
-indicator("Previous Day OHLC", overlay=true)
-
-[prevO, prevH, prevL, prevC] = request.security(syminfo.tickerid, "D", 
-    [open[1], high[1], low[1], close[1]], lookahead=barmerge.lookahead_on)
-
-plot(prevH, "Prev High", color.green)
-plot(prevL, "Prev Low", color.red)
-plot(prevC, "Prev Close", color.blue)
-```
-
-### Time-Based Exit
-```pine
-// Exit position at specific time
-exitTime = timestamp("America/New_York", year, month, dayofmonth, 15, 45, 0)
-if time >= exitTime and strategy.position_size != 0
-    strategy.close_all("EOD Exit")
-```
-
 **References**:
 - `pine-script-docs/concepts/sessions.html` - Sessions
 - `pine-script-docs/concepts/time.html` - Time handling
+- `pine-script-docs/concepts/timeframes.html` - Timeframes

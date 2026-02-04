@@ -65,6 +65,7 @@ Load the appropriate file based on what you're implementing:
 |-------|------|--------------|
 | Common patterns and idioms | [07-PATTERNS.md](07-PATTERNS.md) | Best practices, code review |
 | Quick answers to common questions | [15-FAQ.md](15-FAQ.md) | Troubleshooting, tips |
+| Script publishing and distribution | [16-PUBLISHING.md](16-PUBLISHING.md) | Publishing scripts |
 
 ## User's Code Style
 

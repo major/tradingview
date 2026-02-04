@@ -14,6 +14,12 @@ Access data from Heikin-Ashi, Renko, Line Break, Kagi, and Point & Figure charts
 
 **Warning**: Non-standard chart prices are synthetic. Do NOT use for strategy backtesting - results will be unrealistic!
 
+### Lower Timeframe Approximation
+Renko, Line Break, Kagi, and Point & Figure charts construct bars using price data from **lower timeframes**. Consequently, these bars only **approximate** the values that would correspond to calculations using actual tick data. This significantly affects backtesting accuracy.
+
+### No Native Drawing Functions
+There are **no native Pine Script functions** to draw Renko, Line Break, Kagi, or Point & Figure bars on a chart. Scripts can only request and plot the values (e.g., using `plot()`, `plotcandle()`, or `plotbar()`).
+
 ## Heikin-Ashi
 
 ### Get Heikin-Ashi Data
@@ -33,10 +39,10 @@ plotcandle(haO, haH, haL, haC, "HA", color=haC > haO ? color.green : color.red)
 ```
 
 ### Heikin-Ashi Characteristics
-- Smoothed OHLC values
-- Good for identifying trends
-- Prices are averages (not real market prices!)
-- NOT suitable for realistic backtesting
+- **Calculation**: HA values are calculated using combinations of real OHLC values from the **current and previous bar**.
+- **Smoothing**: Smoothed OHLC values, good for identifying trends.
+- **Moving Average Behavior**: HA close values act more like a moving average than real market prices.
+- **Trading Warning**: Unsuited for **automated trading** and backtesting because orders execute on real market prices, not synthetic HA prices.
 
 ## Renko
 
@@ -58,7 +64,7 @@ plot(renkoClose, "Renko Close")
 
 ### Renko Parameters
 ```pine
-ticker.renko(symbol, style, param, request_gaps, gaps_source)
+ticker.renko(symbol, style, param)
 ```
 
 | Style | param meaning |
@@ -67,6 +73,7 @@ ticker.renko(symbol, style, param, request_gaps, gaps_source)
 | "Traditional" | Box size in price units |
 
 ### Renko Characteristics
+- **Visualization**: Bricks stacked in adjacent columns. A new brick is only drawn after the price moves a predetermined amount.
 - Based purely on price movement
 - No time axis (bars form on price change)
 - No volume data
@@ -86,7 +93,7 @@ plot(lbClose, "Line Break Close")
 ### Line Break Characteristics
 - Vertical boxes based on price changes
 - `n` parameter = number of prior boxes to compare
-- Reversal requires breaking `n` prior boxes
+- **Reversal Logic**: A reversal occurs only when the price breaks the high or low of the **`n` prior boxes**.
 
 ## Kagi
 
@@ -132,6 +139,11 @@ ticker.pointfigure(symbol, source, style, param, reversal)
 | param | ATR period or box size |
 | reversal | Number of boxes for reversal |
 
+### P&F Characteristics
+- **Synthetic OHLC**: Every column of X's or O's is represented as four synthetic OHLC values.
+- Only plots price movements, ignoring time.
+- X's represent rising prices, O's represent falling prices.
+
 ## Combining with Session Filtering
 
 ```pine
@@ -145,8 +157,15 @@ baseTicker = ticker.new(syminfo.prefix, syminfo.ticker, session.regular)
 haTicker = ticker.heikinashi(baseTicker)
 
 [haO, haH, haL, haC] = request.security(haTicker, timeframe.period, 
-    [open, high, low, close])
+    [open, high, low, close], gaps = barmerge.gaps_on)
+
+plotcandle(haO, haH, haL, haC, "HA", color=haC > haO ? color.green : color.red, 
+    style = plot.style_linebr)
 ```
+
+### Session Filtering Parameters
+- **`barmerge.gaps_on`**: Instructs `request.security()` not to fill missing data slots with previous values. This allows the function to return `na` during non-trading hours.
+- **`plot.style_linebr`**: A plot style that breaks the line (or candles) when it encounters `na` values, preventing "ghost" connections across gaps.
 
 ## Chart Type Detection
 

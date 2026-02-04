@@ -1,5 +1,14 @@
 # Pine Script v6 Data Structures
 
+## Series vs. Arrays
+
+| Feature | Series | Array |
+|---------|--------|-------|
+| **Storage** | Automatic time-indexed storage | Manual collection |
+| **Indexing** | `[n]` refers to value `n` bars ago | `get(n)` refers to index `n` |
+| **Size** | Grows with chart history | Fixed or dynamic (max 100k) |
+| **Purpose** | Historical price/indicator data | Custom data sets, sorting, math |
+
 ## Arrays
 
 One-dimensional collections. Max 100,000 elements. Zero-indexed.
@@ -25,17 +34,24 @@ var array<float> history = array.new<float>()
 ```pine
 // Get/Set
 val = array.get(myArray, 0)        // First element
+val = array.get(myArray, -1)       // Last element (negative indexing)
 array.set(myArray, 0, newValue)    // Set first element
+
+// Method Syntax (Alternative)
+val = myArray.get(0)               // Same as array.get(myArray, 0)
+
+// History Referencing
+prevArray = myArray[1]             // State of the array on the previous bar
 
 // Add elements
 array.push(myArray, value)         // Add to end
 array.unshift(myArray, value)      // Add to beginning
-array.insert(myArray, index, value)
+array.insert(myArray, index, value) // Supports negative index
 
 // Remove elements
 lastVal = array.pop(myArray)       // Remove from end
 firstVal = array.shift(myArray)    // Remove from beginning
-array.remove(myArray, index)
+array.remove(myArray, index)       // Supports negative index
 array.clear(myArray)               // Remove all
 
 // Size
@@ -84,8 +100,8 @@ idx = array.indexof(myArray, value)           // First occurrence
 ```pine
 copied = array.copy(myArray)
 sliced = array.slice(myArray, startIdx, endIdx)
-array.concat(array1, array2)                  // Appends array2 to array1
-array.fill(myArray, value)                    // Set all to value
+array.concat(array1, array2)                  // In-place: Appends array2 to array1
+array.fill(myArray, value, from, to)          // Optional index_from, index_to
 array.reverse(myArray)
 ```
 
@@ -103,10 +119,12 @@ avg20 = array.avg(recentCloses)
 
 ## Maps
 
-Key-value collections. Max 50,000 pairs. Unordered.
+Key-value collections. Max 50,000 pairs. Maintains insertion order internally.
 
-**Key types**: int, float, bool, color, string, enum (value types only)
-**Value types**: Any type including arrays, matrices, lines, labels
+**Limits**: Maps have a 100,000 element limit. Since each key-value pair counts as 2 elements, the maximum capacity is 50,000 pairs.
+**Key types**: Any fundamental type or enum type.
+**Value types**: Any type including arrays, matrices, lines, labels.
+**Restrictions**: Maps cannot store collection IDs (arrays, maps, matrices) directly. Use a User-Defined Type (UDT) workaround (a UDT with collection-type fields).
 
 ### Declaration
 
@@ -142,7 +160,7 @@ size = map.size(myMap)
 ### Iteration
 
 ```pine
-// Get keys and values as arrays
+// Get keys and values as arrays (returned in insertion order)
 keys = map.keys(myMap)
 values = map.values(myMap)
 
@@ -180,6 +198,8 @@ aaplPrice = map.get(symbolPrices, "AAPL")
 
 Two-dimensional collections (M x N). Max 100,000 total elements. Zero-indexed.
 
+**Dynamic Dimensions**: Matrices can have dynamic rows/columns that vary across bars.
+
 ### Declaration
 
 ```pine
@@ -213,10 +233,11 @@ matrix.fill(m, 0.0)
 rowArray = matrix.row(m, 0)        // First row
 colArray = matrix.col(m, 0)        // First column
 
-// Add rows/columns
+// Add rows/columns (Multiple signatures)
 matrix.add_row(m)                  // Add empty row at end
-matrix.add_row(m, rowIdx, array)   // Insert array as row
-matrix.add_col(m, colIdx, array)
+matrix.add_row(m, rowIdx, array)   // Insert array as row at specific index
+matrix.add_col(m)                  // Add empty column at end
+matrix.add_col(m, colIdx, array)   // Insert array as column at specific index
 
 // Remove rows/columns
 matrix.remove_row(m, rowIdx)
@@ -265,6 +286,24 @@ if barstate.isconfirmed
         matrix.remove_row(ohlcHistory, 0)
 ```
 
+## Tuples
+
+Immutable, fixed-size collections of values. Primarily used for returning multiple values from functions.
+
+### Syntax
+
+```pine
+// Function returning a tuple
+getValues() =>
+    [close, volume]
+
+// Assignment
+[price, vol] = getValues()
+
+// Ignoring values with _
+[p, _] = getValues()
+```
+
 ## Type Reference
 
 | Collection | Max Size | Index Type | Use Case |
@@ -275,8 +314,10 @@ if barstate.isconfirmed
 
 ## Best Practices
 
-1. **Use `var`** for collections that persist across bars
-2. **Manage size** - remove old elements to prevent hitting limits
-3. **Prefer built-ins** over manual array calculations (e.g., `ta.sma()` vs manual loop)
-4. **Check for `na`** when getting values from maps
-5. **Pre-size when possible** - `array.new<float>(100)` is more efficient than 100 `push()` calls
+1. **Use `var`** for collections that persist across bars.
+2. **`varip` Restrictions**: `varip` can only contain fundamental types, chart point IDs, or UDT objects (with specific restrictions).
+3. **Method Syntax**: Use `collection.method()` for cleaner code (e.g., `myArray.get(0)` instead of `array.get(myArray, 0)`).
+4. **Manage size** - remove old elements to prevent hitting limits.
+5. **Prefer built-ins** over manual array calculations (e.g., `ta.sma()` vs manual loop).
+6. **Check for `na`** when getting values from maps.
+7. **Pre-size when possible** - `array.new<float>(100)` is more efficient than 100 `push()` calls.

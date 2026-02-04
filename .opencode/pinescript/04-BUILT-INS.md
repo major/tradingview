@@ -102,8 +102,8 @@ ta.cum(source)                      // Cumulative sum
 ### Volume Indicators
 
 ```pine
-ta.obv                              // On-Balance Volume
-ta.pvt                              // Price Volume Trend
+ta.obv(source, volume)              // On-Balance Volume
+ta.pvt(source, volume)              // Price Volume Trend
 ```
 
 ## Math Functions (math.*)
@@ -168,6 +168,9 @@ str.tostring(value, format)         // With format (format.mintick, etc.)
 str.tonumber(string)                // String to number (float)
 ```
 
+> [!TIP]
+> **Custom Patterns**: The `format` parameter in `str.tostring()` supports custom patterns like `#.###` (3 decimal places), `0.00000` (fixed 5 places with trailing zeros), `0000,000.##` (commas and leading zeros), and `#.####%` (percentage).
+
 ### Formatting
 
 ```pine
@@ -175,6 +178,14 @@ str.format("{0} is {1}%", symbol, percent)  // Python-style formatting
 str.format_time(timestamp, format, timezone)
 // Format: "yyyy-MM-dd HH:mm:ss"
 ```
+
+> [!TIP]
+> **str.format() tokens**:
+> - `#`: Digit, omitted if not needed.
+> - `0`: Digit, replaced by 0 if not needed.
+> - `.`: Decimal point.
+> - `,`: Grouping separator.
+> - `%`: Percentage (multiplies by 100).
 
 ### String Operations
 
@@ -207,8 +218,8 @@ request.security(
     symbol,                         // Symbol/ticker
     timeframe,                      // Timeframe ("", "D", "W", "M", "60", etc.)
     expression,                     // What to fetch (close, ta.rsi(), etc.)
-    gaps = barmerge.gaps_off,       // How to handle gaps
-    lookahead = barmerge.lookahead_off,  // NEVER use lookahead_on in live!
+    gaps = barmerge.gaps_off,       // barmerge.gaps_on returns na on bars without new data
+    lookahead = barmerge.lookahead_off,  // lookahead_on uses future data (DANGEROUS!)
     ignore_invalid_symbol = false,
     currency = syminfo.currency,
     calc_bars_count = 0
@@ -221,6 +232,9 @@ spyRsi = request.security("SPY", "60", ta.rsi(close, 14))
 
 ### request.security_lower_tf()
 
+> [!NOTE]
+> **Intrabars**: This function retrieves "intrabars" (lower timeframe bars within a chart bar). It **always** returns an `array` of the expression's type.
+
 ```pine
 // Get array of lower timeframe data
 request.security_lower_tf(symbol, timeframe, expression)
@@ -232,6 +246,10 @@ minuteCloses = request.security_lower_tf(syminfo.tickerid, "1", close)
 ### Other Data Requests
 
 ```pine
+request.currency_rate(from, to, ignore_invalid_currency) // Currency conversion rates
+request.economic(country_code, field, gaps, ignore_invalid_symbol) // Economic and industry data
+request.footprint(ticks_per_row, va_percent, imbalance_percent) // Volume footprint data (new in 2026)
+request.seed(source, symbol, expression, ignore_invalid_symbol, calc_bars_count) // Data from GitHub repos
 request.financial(symbol, financial_id, period, gaps, ignore_invalid_symbol, currency)
 request.dividends(symbol, field, gaps, lookahead, ignore_invalid_symbol)
 request.splits(symbol, field, gaps, lookahead, ignore_invalid_symbol)
@@ -267,13 +285,19 @@ maType = input.string("SMA", "MA Type", options=["SMA", "EMA", "WMA"], group=grp
 
 ## Symbol Info (syminfo.*)
 
+> [!IMPORTANT]
+> **Context-Dependent Behavior**: When used inside a `request.*()` expression argument, `syminfo.tickerid` returns the **requested** context's ticker ID, not the chart's. Use `syminfo.main_tickerid` to always get the chart's ticker ID.
+
 ```pine
 syminfo.ticker          // "AAPL" (symbol without exchange)
 syminfo.tickerid        // "NASDAQ:AAPL" (full symbol with exchange)
+syminfo.main_tickerid   // Always chart's ticker ID even in requested contexts
+syminfo.prefix          // Exchange or broker identifier (e.g., "NASDAQ", "CME_MINI_DL")
 syminfo.basecurrency    // Base currency (for forex/crypto)
 syminfo.currency        // Quote currency
 syminfo.description     // Full name
 syminfo.mintick         // Minimum price increment
+syminfo.mincontract     // Smallest tradable amount set by exchange
 syminfo.pointvalue      // Point value for futures
 syminfo.root            // Root symbol (for futures)
 syminfo.session         // Session hours
@@ -283,8 +307,12 @@ syminfo.type            // "stock", "forex", "crypto", "futures", "index"
 
 ## Timeframe Info (timeframe.*)
 
+> [!IMPORTANT]
+> **Context-Dependent Behavior**: When used inside a `request.*()` expression argument, `timeframe.period` returns the **requested** context's timeframe, not the chart's. Use `timeframe.main_period` to always get the script's main timeframe.
+
 ```pine
 timeframe.period        // "D", "W", "60", etc.
+timeframe.main_period   // Always script's main timeframe even in requested contexts
 timeframe.multiplier    // Numeric multiplier (1, 5, 60)
 timeframe.isseconds     // Is seconds timeframe
 timeframe.isminutes     // Is minutes timeframe

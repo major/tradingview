@@ -23,29 +23,69 @@ plot(myValue, display=display.data_window)
 ### How do I open the console?
 `Ctrl+\`` (backtick) - Shows Pine Logs output
 
+### How do I calculate pips?
+Pip size varies by symbol (Forex vs. others). A common approach:
+```pine
+isJPY = str.contains(syminfo.ticker, "JPY")
+pipSize = isJPY ? 0.01 : 0.0001
+pips = (close - open) / pipSize
+```
+
 ## Variables & Types
 
 ### Why can't I use na with bool?
-v6 change: booleans are only `true` or `false`. Use `false` as default instead of `na`.
+v6 change: `bool` is now a strict type that can only be `true` or `false`. It cannot be `na`.
+- `na()`, `nz()`, and `fixnan()` no longer accept `bool` arguments.
+- Undefined conditions return `false` instead of `na`.
+- Use `false` as the default value instead of `na`.
+
+### Is explicit casting required for booleans?
+Yes. In v6, `int` and `float` no longer implicitly cast to `bool`.
+```pine
+// Error in v6
+plot(bar_index ? color.green : color.red)
+
+// Correct in v6
+plot(bool(bar_index) ? color.green : color.red)
+```
+
+### What is lazy evaluation?
+Pine Script v6 uses lazy evaluation for `and` and `or` operators. The right-hand side is only evaluated if the left-hand side doesn't already determine the result.
+```pine
+// expensiveCheck() is skipped if condA is false
+if condA and expensiveCheck()
+    ...
+```
 
 ### What's the difference between var and varip?
 | Mode | Behavior |
 |------|----------|
-| `var` | Initialize once, persist across bars |
-| `varip` | Persist across ticks (causes repainting!) |
+| `var` | Initialize once, persist across bars. |
+| `varip` | Persist across ticks. **Note:** Only affects behavior on REALTIME bars. On historical bars, it behaves like `var`. Backtest results will not reflect intrabar tick persistence. |
 
 ### How do I create a constant array?
 ```pine
 var LEVELS = array.from(10, 20, 30, 40, 50)  // Initialized once
 ```
 
+### Can I use negative indices with arrays?
+Yes. In v6, `array.get(arr, -1)` returns the last element, `-2` the second to last, etc.
+
 ## Drawing & Visuals
 
 ### Why do my lines/labels disappear?
-Default limit is 50. Increase with:
+Default limit is 50. Increase with `max_lines_count`, `max_labels_count`, etc. (up to 500).
+**Note:** Once the limit is reached, Pine Script automatically deletes the oldest objects to create new ones.
 ```pine
 indicator("My Indicator", max_lines_count=500, max_labels_count=500)
 ```
+
+### How do I plot diagonal lines?
+1. **Using `plot()`:** Use `na` values and `offset` to create segments, but this is limited.
+2. **Using `line.new()`:** Best for diagonals. Connect two `chart.point` objects.
+
+### How do I track Support/Resistance lines?
+Store line IDs in an array and update their `x2` coordinate on every bar until a "break" condition occurs, then stop updating or delete them.
 
 ### How far can I draw into the past/future?
 - Past: 9,999 bars
@@ -72,10 +112,13 @@ htfClose = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.
     [high[1], low[1], close[1]], lookahead=barmerge.lookahead_on)
 ```
 
-### How do I detect chart type?
+### What is the format of timeframe.period?
+In v6, `timeframe.period` always includes the multiplier. For example, "1D" instead of "D", "1W" instead of "W".
+
+### How do I get real OHLC on Heikin-Ashi charts?
+Use `ticker.new()` to request data from the underlying non-synthetic symbol:
 ```pine
-if chart.is_heikinashi
-    runtime.error("Not supported on HA charts")
+realClose = request.security(ticker.new(syminfo.prefix, syminfo.ticker), timeframe.period, close)
 ```
 
 ## Time & Sessions
@@ -112,11 +155,38 @@ if myCondition
     lastSignalBar := bar_index
 ```
 
-### How do I add cooldown between signals?
+### How do I calculate averages only when conditions are true?
+Use a `var` variable to accumulate values and a counter, or use an array:
 ```pine
-barsSinceLast = ta.barssince(myCondition[1])
-canSignal = barsSinceLast >= 10 or na(barsSinceLast)
-signal = myCondition and canSignal
+var float sum = 0.0
+var int count = 0
+if myCondition
+    sum += close
+    count += 1
+avg = sum / count
+```
+
+### Why do some functions reject my "length" variable?
+Some built-in functions (like `ta.sma()`) require a "simple int" (constant during execution), while others accept a "series int" (can change per bar). If a function rejects a series length, you may need to use a manual calculation or a loop.
+
+## Visuals & Formatting
+
+### How do I control price precision and formatting?
+Use `precision` and `format` parameters in `indicator()` or `strategy()`:
+```pine
+indicator("My Script", precision=2, format=format.price)
+```
+
+### How do I abbreviate large values (K, M, B)?
+Use `format.volume` in `plot()` or custom functions for string conversion:
+```pine
+plot(volume, format=format.volume)
+```
+
+### How do I plot conditionally?
+Plots cannot be placed inside `if` blocks. Instead, use `na` for values and conditional colors:
+```pine
+plot(myCondition ? close : na, color = myCondition ? color.green : na)
 ```
 
 ## Strategies
@@ -155,6 +225,13 @@ rightTime = chart.right_visible_bar_time
 ```
 
 ## Common Errors
+
+### "Duplicate argument 'X'"
+In v6, you cannot pass the same parameter twice in a function call.
+```pine
+// Error in v6
+plot(close, color=color.red, color=color.blue)
+```
 
 ### "Script has too many local scopes"
 Reduce nesting. Extract logic into functions.

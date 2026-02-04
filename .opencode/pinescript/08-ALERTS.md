@@ -4,25 +4,25 @@
 
 Define alert conditions that users can configure in TradingView's alert dialog.
 
+> [!IMPORTANT]
+> `alertcondition()` only works in **indicators**. In strategies, it will compile without error but will **silently do nothing**. Use `alert()` for strategies.
+
 ```pine
 alertcondition(
     condition,                          // Boolean series (required)
     title = "",                         // Alert name in UI
-    message = ""                        // Default message text
+    message = ""                        // Default message text (const string)
 )
-
-// Basic example
-alertcondition(ta.crossover(close, ta.sma(close, 20)), 
-               title="Price Cross Above SMA", 
-               message="Price crossed above 20-period SMA")
 ```
 
 ### Key Points
 
-1. **Cannot be inside conditionals** - Must be at global scope
-2. **Multiple allowed** - Define several alerts per script
-3. **User configures** - User selects which to enable in alert dialog
-4. **Evaluated every bar** - Condition checked on each bar close
+1. **Cannot be inside conditionals** - Must be at global scope.
+2. **Message must be constant** - The `message` parameter requires a `const string` (known at compile-time). Use placeholders for dynamic data.
+3. **Multiple allowed** - Define several alerts per script.
+4. **User configures** - User selects which to enable in the alert dialog.
+5. **Evaluated every bar** - Condition checked on each bar close.
+
 
 ## Message Placeholders
 
@@ -75,11 +75,11 @@ alertcondition(rsiOversold, "RSI Oversold", "{{ticker}}: RSI entered oversold te
 
 ## alert() Function
 
-For strategy alerts and more dynamic messaging:
+For strategy alerts and more dynamic messaging. Unlike `alertcondition()`, the message can be built at runtime using script variables.
 
 ```pine
 alert(
-    message,                            // Alert message text
+    message,                            // Alert message text (series string)
     freq = alert.freq_once_per_bar      // Frequency setting
 )
 
@@ -89,44 +89,92 @@ alert.freq_once_per_bar_close           // Only on bar close
 alert.freq_all                          // Every tick (use carefully!)
 ```
 
+### alert() in Strategies
+
+By default, strategies recalculate only at the **bar close**. This means `alert.freq_all` and `alert.freq_once_per_bar` will still only fire once per bar (at the close).
+
+To enable **intra-bar alerts** in a strategy, you must set `calc_on_every_tick = true` in the `strategy()` declaration:
+
+```pine
+strategy("My Strategy", calc_on_every_tick = true)
+```
+
 ### alert() vs alertcondition()
 
 | Feature | `alertcondition()` | `alert()` |
 |---------|-------------------|-----------|
 | Scope | Global only | Anywhere (conditionals OK) |
 | User selection | User picks in dialog | Auto-fires when called |
-| Dynamic message | Placeholders only | Full string building |
+| Message Type | `const string` (Placeholders only) | `series string` (Dynamic building) |
 | Use case | Indicators | Strategies, dynamic alerts |
 
 ## Strategy Alerts
 
-Strategies use `alert_message` parameter in order functions:
+Strategy alerts are unique because they can trigger on two different types of events:
+1. **`alert()` function calls** (manual triggers in code).
+2. **Order fill events** (automatic triggers when orders execute).
+
+When creating a strategy alert in the UI, users can choose to trigger on "Order fills and alert() function calls", "Order fills only", or "alert() function calls only".
+
+### Order Fill Events
+
+Strategies automatically generate alert events when the broker emulator fills an order. You can customize these messages using the `alert_message` parameter in `strategy.*()` functions.
 
 ```pine
 //@version=6
-strategy("Alert Strategy", overlay=true)
+strategy("Order Fill Alert Demo", overlay=true)
+
+// Customize the default message for ALL order fills using this annotation
+// @strategy_alert_message {{strategy.order.alert_message}}
 
 if buyCondition
     strategy.entry("Long", strategy.long, 
-                   alert_message="BUY {{ticker}} at {{close}}")
+                   alert_message="BUY {{strategy.order.qty}} {{ticker}} at {{strategy.order.price}}")
 
 if sellCondition
     strategy.close("Long", 
-                   alert_message="SELL {{ticker}} at {{close}}")
+                   alert_message="SELL {{ticker}} at {{strategy.order.price}}")
 ```
 
+### Strategy-Specific Placeholders
+
+Order fill alerts support special placeholders that are not available in `alertcondition()`:
+
+| Placeholder | Description |
+|-------------|-------------|
+| `{{strategy.order.alert_message}}` | The string passed to the `alert_message` parameter |
+| `{{strategy.order.action}}` | "buy" or "sell" |
+| `{{strategy.order.contracts}}` | Number of contracts filled |
+| `{{strategy.order.price}}` | Execution price |
+| `{{strategy.order.id}}` | Order ID string |
+| `{{strategy.order.comment}}` | Order comment string |
+| `{{strategy.position_size}}` | New position size after fill |
+
 ### Exit-Specific Messages
+
+`strategy.exit()` allows for different messages based on which part of the bracket was hit:
 
 ```pine
 strategy.exit("Exit", "Long",
     profit = 100,
     loss = 50,
-    comment_profit = "TP Hit",
-    comment_loss = "SL Hit",
-    alert_profit = "Take profit triggered at {{close}}",
-    alert_loss = "Stop loss triggered at {{close}}"
+    alert_profit = "Take profit hit at {{strategy.order.price}}",
+    alert_loss = "Stop loss hit at {{strategy.order.price}}"
 )
 ```
+
+## Alert Behavior & Restrictions
+
+### Realtime Bar Restriction
+**Alerts only trigger on realtime bars.** They never trigger on historical bars during the initial script execution. The operational scope of alert code is restricted to `barstate.isrealtime`.
+
+### Alert Snapshots
+When you create an alert in the TradingView UI, the system saves a **snapshot** of:
+1. The current script code.
+2. The current input settings.
+3. The chart's symbol and timeframe.
+
+**Crucial:** If you update your script code or change its inputs, existing alerts **will not update**. You must delete the old alert and create a new one to apply changes.
 
 ## Webhook Integration
 
@@ -157,6 +205,22 @@ if buySignal
 ```
 
 ## Common Alert Patterns
+
+### Selective alert() Calls
+Since "Any alert() function call" triggers on *every* `alert()` in your script, use inputs to let users choose which events trigger the alert.
+
+```pine
+//@version=6
+indicator("Selective Alerts")
+enableLongs  = input.bool(true, "Enable Long Alerts")
+enableShorts = input.bool(true, "Enable Short Alerts")
+
+if longCondition and enableLongs
+    alert("Long Signal", alert.freq_once_per_bar)
+
+if shortCondition and enableShorts
+    alert("Short Signal", alert.freq_once_per_bar)
+```
 
 ### Compound Conditions
 

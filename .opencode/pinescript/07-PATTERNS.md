@@ -2,39 +2,68 @@
 
 ## Script Organization
 
-### Standard Structure
+### Recommended Section Ordering
+
+Following a standard structure makes scripts easier to read and maintain. The recommended order is:
+
+1.  **License**: License comments (e.g., Mozilla Public License 2.0).
+2.  **Version**: Compiler annotation `//@version=6`.
+3.  **Declaration**: `indicator()`, `strategy()`, or `library()`.
+4.  **Imports**: `import` statements for libraries.
+5.  **Constants**: `const` declarations (use `SNAKE_CASE`).
+6.  **Inputs**: `input.*()` calls (use `camelCase` with `Input` suffix).
+7.  **Functions**: User-defined function declarations.
+8.  **Calculations**: Core logic and variable assignments.
+9.  **Strategy Calls**: `strategy.*()` calls (for strategies).
+10. **Visuals**: `plot*()`, `bgcolor()`, `barcolor()`, drawings.
+11. **Alerts**: `alert()` and `alertcondition()` calls.
+
+### Standard Structure Example
 
 ```pine
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © username
+
 //@version=6
 indicator("Indicator Name", overlay=true, max_labels_count=50)
 
+// === CONSTANTS ===
+const color BULL_COLOR = color.green
+const color BEAR_COLOR = color.red
+
 // === INPUTS ===
 grpSignal = "Signal Settings"
-length = input.int(14, "Length", minval=1, group=grpSignal)
-threshold = input.float(1.5, "Threshold", minval=0.1, group=grpSignal)
+lengthInput = input.int(14, "Length", minval=1, group=grpSignal)
+thresholdInput = input.float(1.5, "Threshold", minval=0.1, group=grpSignal)
 
 grpVisual = "Visual Settings"
-showLabels = input.bool(true, "Show Labels", group=grpVisual)
-bullColor = input.color(color.green, "Bull Color", group=grpVisual)
-bearColor = input.color(color.red, "Bear Color", group=grpVisual)
+showLabelsInput = input.bool(true, "Show Labels", group=grpVisual)
+
+// === FUNCTIONS ===
+// @function Calculates a custom signal
+getSignal(src, len) =>
+    ta.sma(src, len)
 
 // === CALCULATIONS ===
-smaVal = ta.sma(close, length)
-condition = close > smaVal * threshold
+smaVal = getSignal(close, lengthInput)
+condition = close > smaVal * thresholdInput
 
 // === VISUALS ===
 plot(smaVal, "SMA", color.blue)
-plotshape(condition, "Signal", shape.triangleup, location.belowbar, bullColor)
-
-// === TABLE ===
-var table infoTable = table.new(position.top_right, 2, 2)
-if barstate.islast
-    table.cell(infoTable, 0, 0, "SMA", bgcolor=color.gray)
-    table.cell(infoTable, 1, 0, str.tostring(smaVal, "#.##"))
+plotshape(condition, "Signal", shape.triangleup, location.belowbar, BULL_COLOR)
 
 // === ALERTS ===
+// Alerts should always be at the end of the script
 alertcondition(condition, "Signal Alert", "Condition triggered")
 ```
+
+## Naming Conventions
+
+Adhering to naming conventions improves code clarity:
+
+- **camelCase**: Use for all identifiers (variables, functions): `maFast`, `maLengthInput`, `pivotHi()`.
+- **SNAKE_CASE**: Use for constants: `BULL_COLOR`, `MAX_LOOKBACK`.
+- **Qualifying Suffixes**: Use suffixes to provide clues about type or provenance: `maLengthInput`, `priceClose`, `resultsTable`, `maPlotID`.
 
 ## Input Patterns
 
@@ -83,9 +112,19 @@ htfBullish = htfClose > htfSma
 
 ### Safe MTF with Repainting Control
 
+To avoid repainting when requesting higher timeframe data, use the `expression[1]` pattern or `lookahead = barmerge.lookahead_on` with `expression[1]`.
+
 ```pine
-// Use barstate.isconfirmed to avoid repainting
-htfClose = request.security(syminfo.tickerid, "D", close[barstate.isconfirmed ? 0 : 1])
+// Standard non-repainting MTF pattern
+htfClose = request.security(syminfo.tickerid, "D", close[1])
+
+// Alternative: Using barstate.isconfirmed to gate calculations
+var float confirmedHtfClose = na
+if barstate.isconfirmed
+    confirmedHtfClose := request.security(syminfo.tickerid, "D", close)
+
+// Using lookahead_on with expression[1] (no-gap version)
+htfCloseNoGap = request.security(syminfo.tickerid, "D", close[1], lookahead = barmerge.lookahead_on)
 ```
 
 ## Signal Detection
@@ -278,6 +317,68 @@ p1 = plot(highLine, "Resistance", color.red)
 p2 = plot(lowLine, "Support", color.green)
 plot(midLine, "Mid", color.gray, style=plot.style_stepline)
 fill(p1, p2, color.new(color.blue, 90))
+```
+
+## Repainting Awareness
+
+Repainting occurs when a script's behavior differs between historical bars and realtime bars.
+
+### Causes of Repainting
+1.  **HTF Data**: Using `request.security()` without proper offsets (e.g., using `close` instead of `close[1]`).
+2.  **Realtime Updates**: Calculations that change during a bar's formation (e.g., using `high` or `low` in a way that depends on the current bar's state).
+3.  **Future Leakage**: Using `lookahead = barmerge.lookahead_on` with current bar data.
+
+### How to Avoid Repainting
+- Use `barstate.isconfirmed` to gate calculations or alerts.
+- Use `close[1]` or `open` instead of `close` for signals.
+- Use the `expression[1]` pattern for MTF requests.
+
+### barstate.isconfirmed Usage
+`barstate.isconfirmed` is true only on the last update of a bar (when it closes). Using it ensures that your logic only executes once the data is final.
+
+```pine
+// Only execute logic when the bar is closed
+if barstate.isconfirmed
+    alert("Signal confirmed at " + str.tostring(close))
+```
+
+## Scope Documentation
+
+Understanding scope is critical for variable accessibility:
+
+- **Global Scope**: Variables declared outside any function or conditional block. Accessible from anywhere in the script.
+- **Local Scope**: Variables declared inside a function, `if`, `for`, or `switch` block. Accessible only within that block.
+- **Inner vs Outer**: Inner scopes can access variables from outer scopes, but outer scopes cannot access variables from inner scopes.
+
+```pine
+// Global scope
+int globalVal = 10
+
+if barstate.isconfirmed
+    // Local scope
+    int localVal = 20
+    globalVal := globalVal + localVal // OK: Inner can access outer
+    
+// plot(localVal) // ERROR: Outer cannot access inner
+```
+
+## Line Wrapping Conventions
+
+Proper line wrapping makes long expressions readable:
+
+- **Indentation**: Wrapped lines should use an indentation that is **not** a multiple of four (e.g., 2 spaces), unless the expression is enclosed in parentheses.
+- **Parentheses**: If an expression is wrapped inside `()`, any indentation (including multiples of four) is allowed.
+
+```pine
+// Wrapped line (not in parens) - use 2 spaces
+longCondition = close > open and 
+  high > high[1] and 
+  low > low[1]
+
+// Wrapped line (in parens) - can use 4 spaces
+plot(ta.sma(close, 20), 
+    title = "SMA", 
+    color = color.blue)
 ```
 
 ## Scoring Systems

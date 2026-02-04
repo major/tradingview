@@ -1,5 +1,28 @@
 # Pine Script v6 Language Reference
 
+## Core Concepts
+
+### Execution Model
+Pine Script executes in a **bar-by-bar** fashion:
+1. **Historical Bars**: The script runs once per bar from left to right. On each bar, built-in variables (open, high, etc.) update, the script executes from top to bottom, and results are committed to the time series.
+2. **Realtime Bar**: The script executes **repeatedly on every tick**. 
+   - **Rollback**: Before each recalculation, the script state is "rolled back" to the last confirmed state (the close of the previous bar).
+   - **Commit**: Only the final tick of the bar is saved to history.
+   - **varip**: Variables declared with `varip` escape this rollback and persist across ticks.
+
+### Type System & Qualifiers
+Pine Script uses a dual-type system: **Type** (int, float, etc.) and **Qualifier** (const, input, etc.).
+
+**Qualifier Hierarchy** (weakest to strongest):
+`const` < `input` < `simple` < `series`
+
+- **const**: Known at compile time (e.g., `10`).
+- **input**: Known after user inputs are processed (e.g., `input.int(10)`).
+- **simple**: Known on the first bar of the chart (e.g., `syminfo.mintick`).
+- **series**: Can change on every bar (e.g., `close`).
+
+**Rule**: A function expecting a qualifier will accept that qualifier or any **weaker** one, but never a **stronger** one. For example, a function requiring `simple int` will accept `const int` but not `series int`.
+
 ## Variables
 
 ### Declaration
@@ -41,9 +64,11 @@ x += 1       // Shorthand (also -=, *=, /=, %=)
 |------|----------|----------|
 | (none) | Reinitialize every bar | Default, most calculations |
 | `var` | Initialize once, persist across bars | Counters, state tracking, running totals |
-| `varip` | Persist across realtime ticks AND bars | Tick counting (⚠️ **causes repainting!**) |
+| `varip` | Persist across realtime ticks AND bars | Tick counting (⚠️ **escapes rollback!**) |
 
-**Important**: `varip` causes **repainting** because the value changes during the realtime bar as new ticks arrive, then locks in when the bar closes. Historical bars show the final closed value, not the intermediate tick values. Use only when tick-level precision is essential.
+**Important**: `varip` (Variable Intrabar Persist) is unique because it **escapes the rollback process** that occurs on every realtime tick. While normal variables reset to their state at the end of the previous bar before each tick calculation, `varip` variables retain their value from the previous tick. 
+
+**Warning**: This causes **repainting**. Historical bars show only the final value when the bar closed, while the realtime bar's value changes with every tick. Use only for tasks like tick counting or tracking intrabar extremes.
 
 ```pine
 counter = 0           // Always 0 (reinitializes each bar)
@@ -90,10 +115,9 @@ a % b    // Modulo (remainder)
 
 **Division Note**: Pine Script division always returns a float, even when dividing integers. If you need integer division, use `int(a / b)` to truncate.
 
-**Modulo Note**: The modulo operator calculates remainder using the formula: `a - b * floor(a/b)`. This means:
-- `7 % 3 = 1` (because 7 - 3 * floor(7/3) = 7 - 3 * 2 = 1)
-- `-7 % 3 = 2` (because -7 - 3 * floor(-7/3) = -7 - 3 * (-3) = 2)
-- Modulo with negative numbers may produce unexpected results; use `abs()` if you need traditional behavior
+**Modulo Note**: The modulo operator calculates the remainder using the formula: `a - b * math.floor(a/b)`. This behavior is consistent with how many mathematical systems handle negative numbers:
+- `7 % 3 = 1` (7 - 3 * floor(2.33) = 7 - 3 * 2 = 1)
+- `-7 % 3 = 2` (-7 - 3 * floor(-2.33) = -7 - 3 * -3 = 2)
 
 ### Comparison
 ```pine
@@ -124,17 +148,17 @@ result = cond1 ? val1 : cond2 ? val2 : val3
 
 Operators are evaluated in this order (highest to lowest precedence). Operators on the same level are evaluated left-to-right.
 
-| Precedence | Operators | Type |
-|-----------|-----------|------|
-| 1 (Highest) | `[]` | History reference, array/map indexing |
-| 2 | `.` | Method call, field access |
-| 3 | `not` | Logical NOT |
-| 4 | `*`, `/`, `%` | Multiplication, division, modulo |
-| 5 | `+`, `-` | Addition, subtraction |
-| 6 | `<`, `<=`, `>`, `>=` | Comparison |
-| 7 | `==`, `!=` | Equality |
-| 8 | `and` | Logical AND |
-| 9 (Lowest) | `or` | Logical OR |
+| Precedence | Operators | Description |
+|-----------|-----------|-------------|
+| 9 (Highest) | `[]` | History reference, array/map indexing |
+| 8 | `+`, `-`, `not` | Unary plus, unary minus, logical NOT |
+| 7 | `*`, `/`, `%` | Multiplication, division, modulo |
+| 6 | `+`, `-` | Addition, subtraction |
+| 5 | `>`, `<`, `>=`, `<=` | Comparison |
+| 4 | `==`, `!=` | Equality |
+| 3 | `and` | Logical AND |
+| 2 | `or` | Logical OR |
+| 1 (Lowest) | `?:` | Ternary operator |
 
 **Example**: `a + b * c` evaluates as `a + (b * c)` because `*` has higher precedence than `+`.
 
@@ -188,22 +212,32 @@ action = switch myInput
 ```
 
 ### Restrictions in Conditionals
-These functions CANNOT be called inside if/switch blocks:
-- `plot()`, `plotshape()`, `plotchar()`, `plotarrow()`, `plotcandle()`, `plotbar()`
-- `barcolor()`, `bgcolor()`, `fill()`
-- `hline()`, `alertcondition()`
-- `indicator()`, `strategy()`, `library()`
+The following functions **CANNOT** be called inside `if` or `switch` blocks because they must be executed on every bar to maintain their internal state or because they are global-scope only:
+- **Plotting**: `plot()`, `plotshape()`, `plotchar()`, `plotarrow()`, `plotcandle()`, `plotbar()`
+- **Visuals**: `barcolor()`, `bgcolor()`, `fill()`
+- **Lines/Alerts**: `hline()`, `alertcondition()`
+- **Declarations**: `indicator()`, `strategy()`, `library()`
 
-**Solution**: Calculate conditionally, plot unconditionally:
+**Solution**: Calculate the value/condition inside the block, but call the plotting function at the global scope using `na` for bars where nothing should be drawn:
 ```pine
-// WRONG
-if condition
-    plot(value)  // Error!
-
 // CORRECT
-plotValue = condition ? value : na
+plotValue = condition ? close : na
 plot(plotValue)
+
+// For candles/bars
+plotcandle(condition ? open : na, condition ? high : na, condition ? low : na, condition ? close : na)
 ```
+
+### Indentation & Formatting
+- **Blocks**: Local blocks (inside `if`, `for`, `while`, etc.) **must** be indented by **4 spaces or 1 tab**.
+- **Line Wrapping**: To wrap a long line, the continuation line must start with any amount of indentation **except** a multiple of 4 (to avoid being mistaken for a new block).
+  ```pine
+  // Correct wrapping (2 spaces)
+  x = open + 
+    high + 
+    low
+  ```
+
 
 ## Loops
 
@@ -252,69 +286,43 @@ for i = 0 to 9
 
 ### Critical: var/varip with Loops
 
-⚠️ **IMPORTANT**: When a loop is initialized with `var` or `varip`, it **exits after 1 iteration** on subsequent bars!
+⚠️ **IMPORTANT**: If you initialize a variable with a loop's result using `var` or `varip`, the loop **exits after 1 iteration** on all bars after the first one!
 
 ```pine
-// WRONG: Loop only runs once after first bar
-var sum = 0.0
-for i = 0 to 9
-    sum += close[i]  // Only executes on first bar, then exits!
-
-// CORRECT: Reinitialize loop variable each bar
-sum = 0.0
-for i = 0 to 9
-    sum += close[i]  // Runs fully every bar
-
-// CORRECT: Use var for accumulation, not loop
-var sum = 0.0
-sum += close[0]  // Add current bar's close each bar
+// WRONG: Loop only runs once on the first bar
+var sum = for i = 0 to 9
+    close[i]  // This loop will NOT run on subsequent bars!
 ```
 
-**Why this happens**: The `var` keyword persists the loop's internal state. Once the loop completes, its state is "done", so it doesn't re-enter on subsequent bars.
-
-**Workaround**: If you need to accumulate values across bars, use `var` on the accumulator variable, not the loop itself.
+**Workarounds**:
+1. **Declare before loop**, then reassign inside:
+   ```pine
+   var float mySum = na
+   mySum := for i = 0 to 9
+       close[i]
+   ```
+2. **Move to a function**:
+   ```pine
+   getSum() =>
+       for i = 0 to 9
+           close[i]
+   var float mySum = getSum()
+   ```
 
 ### When to Use Loops
 
-**Prefer built-ins** when available:
-```pine
-// BAD: Manual loop
-sum = 0.0
-for i = 0 to length - 1
-    sum += close[i]
-avg = sum / length
+**Prefer built-ins** when available (e.g., `ta.sma()`, `ta.highest()`). Use loops for:
 
-// GOOD: Use built-in
-avg = ta.sma(close, length)
-```
-
-**Use loops for**:
-
-1. **Iterating collections** (arrays, maps, matrices):
+1. **Iterating collections** (arrays, maps, matrices).
+2. **Custom calculations** not available in built-ins.
+3. **Variable lookback** based on current bar conditions:
    ```pine
-   myArray = array.from(10, 20, 30, 40, 50)
-   for value in myArray
-       plot(value)
-   ```
-
-2. **Custom calculations not in built-ins**:
-   ```pine
-   // Calculate weighted moving average with custom weights
-   weights = array.from(0.5, 0.3, 0.2)
-   sum = 0.0
-   for [i, w] in weights
-       sum += close[i] * w
-   wma = sum
-   ```
-
-3. **Variable lookback based on runtime conditions**:
-   ```pine
-   // Sum closes for a user-specified number of bars
-   userLength = input(10, "Lookback Period")
-   sum = 0.0
-   for i = 0 to userLength - 1
-       sum += close[i]
-   avg = sum / userLength
+   // Find how many bars ago the high was higher than current high
+   lookback = 0
+   for i = 1 to 500
+       if high[i] > high
+           lookback := i
+           break
    ```
 
 ## User-Defined Functions
@@ -364,8 +372,10 @@ result3 = myFunc(close, 20, 2.0)
 ```
 
 ### Methods
+Methods are functions called with dot notation. The first parameter **must** have an explicit type, which determines what types the method can be used on.
+
 ```pine
-// Define as method
+// Define as method for 'float' type
 method double(float this) => this * 2
 
 // Use with dot notation
@@ -374,43 +384,15 @@ y = x.double()  // y = 10.0
 ```
 
 ### Function Restrictions
-
 Functions **cannot**:
-- Be defined inside other functions
-- Modify global variables
-- Modify their parameters
-- Call themselves recursively
-
-```pine
-// WRONG: Modifying global
-var globalVar = 0
-badFunc() =>
-    globalVar := 1  // Error!
-
-// CORRECT: Return new value
-goodFunc(int val) =>
-    val + 1
-```
-
-**Built-in Functions Not Callable from User Functions**: The following built-in functions cannot be called from inside user-defined functions:
-- **Plotting**: `plot()`, `plotshape()`, `plotchar()`, `plotarrow()`, `plotcandle()`, `plotbar()`, `barcolor()`, `bgcolor()`, `fill()`, `hline()`
-- **Alerts**: `alertcondition()`
-- **Script Declaration**: `indicator()`, `strategy()`, `library()`
-- **Request Functions**: `request.security()` (with certain parameters)
-
-**Workaround**: Calculate values in functions, then plot/alert at the global scope:
-```pine
-// WRONG
-myFunc() =>
-    plot(close)  // Error!
-
-// CORRECT
-myFunc() =>
-    close * 2    // Return value
-
-result = myFunc()
-plot(result)     // Plot at global scope
-```
+- Be defined inside other functions.
+- Modify global variables (use `:=` on globals is forbidden inside functions).
+- Call themselves recursively.
+- **Call certain built-ins**: Functions that require global scope or have specific execution requirements cannot be called from user functions. This includes:
+  - `indicator()`, `strategy()`, `library()`
+  - `input.*()` functions
+  - `plot*()`, `barcolor()`, `bgcolor()`, `fill()`, `hline()`
+  - `alertcondition()`
 
 ## User-Defined Types (Objects)
 
@@ -546,6 +528,15 @@ for sig in signals
     if sig == Signal.buy
         // Process buy signals
 ```
+
+## Collections
+Pine Script supports three types of collections for managing groups of data. All collections are **reference types** and always have the `series` qualifier.
+
+- **Arrays**: One-dimensional ordered lists (e.g., `array<float>`).
+- **Maps**: Key-value pairs where keys are fundamental types (e.g., `map<string, float>`).
+- **Matrices**: Two-dimensional grids of data (e.g., `matrix<int>`).
+
+For detailed usage, see [03-DATA-STRUCTURES.md](03-DATA-STRUCTURES.md).
 
 ## Best Practices
 

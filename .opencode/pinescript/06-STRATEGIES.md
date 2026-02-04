@@ -24,9 +24,10 @@ strategy(
     slippage = 0,                       // Ticks of slippage
     
     // Execution
-    process_orders_on_close = false,    // Execute on bar close (vs next open)
-    calc_on_every_tick = false,         // Recalculate on every tick
-    calc_on_order_fills = false,        // Recalculate on fills
+    process_orders_on_close = false,    // Execute on bar close (vs next open). Causes repainting!
+    calc_on_every_tick = false,         // Recalculate on every tick. Causes repainting!
+    calc_on_order_fills = false,        // Recalculate on fills. Provides avg_price on entry bar.
+    use_bar_magnifier = false,          // Use LTF data for precise fills (Premium+)
     
     // Margin
     margin_long = 100,                  // % margin required for longs
@@ -44,7 +45,7 @@ strategy(
 
 ### strategy.entry()
 
-Main function for opening positions. **Auto-reverses** if called with opposite direction.
+Main function for opening positions. **Auto-reverses** if called with opposite direction by adding the opposite position's size to the new order (effectively closing old + opening new).
 
 ```pine
 strategy.entry(
@@ -105,7 +106,7 @@ strategy.exit(
     // Trailing stop
     trail_price = na,                   // Trail activation price
     trail_points = na,                  // Points to trail behind
-    trail_offset = na,                  // Points offset from trail
+    trail_offset = na,                  // Distance in TICKS trailing behind high/low
     
     oca_name = "",
     comment = "",
@@ -163,7 +164,7 @@ strategy.cancel_all()                   // Cancel all pending orders
 
 ### strategy.order()
 
-Place order without auto-reversal logic.
+Place order without auto-reversal logic. Ignores pyramiding limits and other strategy properties; treats each order independently.
 
 ```pine
 strategy.order(
@@ -182,6 +183,36 @@ strategy.order(
 // Use for pyramiding or complex order management
 if buySignal
     strategy.order("Add", strategy.long, qty=1)
+```
+
+## OCA (One-Cancels-All) Groups
+
+OCA groups link multiple orders together. When one order in the group is filled, it affects the others.
+
+- **`strategy.oca.cancel`**: Filling one order cancels all others in the group.
+- **`strategy.oca.reduce`**: Filling one order reduces the quantity of others in the group by the same amount.
+
+```pine
+// Example: Two potential entry points, only want one
+strategy.entry("Limit Entry", strategy.long, limit=90, oca_name="Entry", oca_type=strategy.oca.cancel)
+strategy.entry("Stop Entry", strategy.long, stop=110, oca_name="Entry", oca_type=strategy.oca.cancel)
+```
+
+## Strategy Properties & Risk Management
+
+### Pyramiding
+- **Default**: `pyramiding = 0` (only one entry allowed in each direction).
+- **Behavior**: If `pyramiding > 0`, the strategy can open multiple positions in the same direction until the limit is reached.
+- **Note**: Price-based orders (limit/stop) can sometimes exceed pyramiding limits if multiple orders trigger on the same bar.
+
+### Margin & Liquidation
+- **`margin_long` / `margin_short`**: The percentage of the position value required as margin (default 100%).
+- **Liquidation**: If equity falls below the required margin, the strategy simulates a liquidation (margin call) and closes the position.
+
+### Risk Management Functions
+- **`strategy.risk.allow_entry_in()`**: Restricts entries to only long, only short, or both.
+```pine
+strategy.risk.allow_entry_in(strategy.direction.long) // Only allow long entries
 ```
 
 ## Position Information
@@ -231,7 +262,32 @@ strategy.closedtrades.max_runup(0)
 strategy.closedtrades.max_drawdown(0)
 ```
 
-### Performance Metrics
+## Multiple Exit Strategies & Partial Exits
+
+You can call `strategy.exit()` multiple times to create complex exit logic or partial exits.
+
+### Partial Exits
+Use `qty_percent` to exit a portion of the position.
+
+```pine
+// Exit 50% at first target, remaining 50% at second target
+strategy.exit("TP1", "Long", qty_percent=50, limit=close * 1.05)
+strategy.exit("TP2", "Long", qty_percent=100, limit=close * 1.10)
+```
+
+### Multiple Exit Types
+Combine profit targets, stop losses, and trailing stops in a single call or multiple calls.
+
+```pine
+// One call for all
+strategy.exit("Exit", "Long", profit=100, loss=50, trail_points=30, trail_offset=5)
+
+// Separate calls for different logic
+strategy.exit("Fixed Stop", "Long", loss=100)
+strategy.exit("Trailing", "Long", trail_points=50, trail_offset=10)
+```
+
+## Performance Metrics
 
 ```pine
 strategy.equity                      // Current equity
@@ -246,6 +302,40 @@ strategy.eventrades                  // Number of breakeven trades
 strategy.max_drawdown                // Maximum drawdown
 strategy.max_runup                   // Maximum runup
 ```
+
+## Broker Emulator & Execution Model
+
+### Execution Timing
+- **Script Execution**: By default, strategy scripts execute at the **close** of each bar.
+- **Order Filling**: Orders placed during a bar's execution are typically filled at the **open of the next bar**.
+- **Exception**: If `process_orders_on_close = true`, orders can fill at the close of the current bar (the same bar that generated the signal), but this can lead to repainting.
+
+### Broker Emulator Assumptions
+The broker emulator simulates intrabar price movement to determine if and when orders (like stops and limits) are filled:
+- **Intrabar Path**:
+  - If `open` is closer to `high` than `low`: `open` -> `high` -> `low` -> `close`.
+  - If `open` is closer to `low` than `high`: `open` -> `low` -> `high` -> `close`.
+- **No Gaps**: The emulator assumes no price gaps occur *within* a single bar.
+- **External Gaps**: Price-based orders (limit/stop) do not fill during gaps between bars. If the price "jumps" over an order level, it fills at the next available `open` price.
+
+### Bar Magnifier
+- `use_bar_magnifier = true` (Premium+ required).
+- Uses lower-timeframe (LTF) data to simulate intrabar movement more precisely, providing more realistic backtesting results for stop/limit orders.
+
+## Repainting in Strategies
+
+Repainting occurs when a strategy's historical behavior differs from its realtime behavior.
+
+### Common Causes
+- **`calc_on_every_tick = true`**: Recalculates on every price update, allowing orders to trigger multiple times per bar.
+- **`process_orders_on_close = true`**: Fills orders at the close of the signal bar. While it provides faster fills, it can cause divergence between backtest and live results.
+- **Using `close` on realtime bar**: Signals may appear and disappear as the price fluctuates before the bar confirms.
+- **Future Data Leak**: Using `request.security()` without `[1]` offset and `lookahead=barmerge.lookahead_on`.
+
+### How to Avoid Repainting
+- **Use Confirmed Bars**: Base signals on `close[1]` or check `barstate.isconfirmed`.
+- **Safe HTF Data**: Always use the `[1]` offset with `lookahead_on` when requesting data from higher timeframes.
+- **Standard Charts**: Avoid running strategies on Heikin-Ashi, Renko, or other non-standard chart types for backtesting.
 
 ## Order Types Summary
 

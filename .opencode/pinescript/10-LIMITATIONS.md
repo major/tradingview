@@ -7,52 +7,98 @@
 | Limit | Value | Notes |
 |-------|-------|-------|
 | Compilation | 2 minutes | 3 warnings = 1 hour ban |
-| Total execution | 20-40 seconds | All bars combined |
-| Loop iteration | 500ms per loop | Per bar |
+| Total execution | 20-40 seconds | 20s for Basic, 40s for others |
+| Loop iteration | 500ms per loop | Per bar; outer loop counts as one |
 
-### Chart Visual Limits
+### Size & Variable Limits
 
-| Element | Default | Maximum |
-|---------|---------|---------|
-| Plot count | 64 | 64 total (includes plot, plotshape, plotchar, etc.) |
-| Lines | 50 | 500 (via `max_lines_count`) |
-| Boxes | 50 | 500 (via `max_boxes_count`) |
-| Labels | 50 | 500 (via `max_labels_count`) |
-| Polylines | 50 | 100 (via `max_polylines_count`) |
-| Tables | 9 | 9 (one per position) |
+| Element | Limit | Notes |
+|---------|-------|-------|
+| Compiled tokens | 100,000 | Actual size constraint (not just KB) |
+| Variables per scope | 1,000 | Applies to each function individually |
+| Compilation request | 5 MB | Total size of script + imported libraries |
+| Local scopes | 500 | Nested if/for/while blocks |
+| Array/map/matrix elements | 100,000 | Total elements across the collection |
+| Map pairs | 50,000 | 100K elements / 2 (key + value) |
+
+**Note**: The global scope is implicitly wrapped in a function, so the 1,000 variable limit applies to it as well.
+
+## Chart Visual Limits
+
+| Element | Default | Maximum | Notes |
+|---------|---------|---------|-------|
+| Plot count | 64 | 64 | Includes plot, plotshape, plotchar, etc. |
+| Lines | 50 | 500 | via `max_lines_count` |
+| Boxes | 50 | 500 | via `max_boxes_count` |
+| Labels | 50 | 500 | via `max_labels_count` |
+| Polylines | 50 | 100 | via `max_polylines_count` |
+| Tables | 9 | 9 | One per position |
+| Bars Forward | - | 500 | For `xloc.bar_index` positioning |
 
 ```pine
 //@version=6
 indicator("My Indicator", max_lines_count=500, max_labels_count=500)
 ```
 
-### Request Limits
+## Request Limits
 
-| Limit | Value |
-|-------|-------|
-| Unique `request.*()` calls | 40 (64 for Ultimate) |
-| Intrabars per `request.security_lower_tf()` | 100,000 |
+| Limit | Value | Notes |
+|-------|-------|-------|
+| Unique `request.*()` calls | 40 / 64 | 64 for Ultimate plan |
+| Intrabars per `request.security_lower_tf()` | Varies | Basic-Premium: 100K, Expert: 125K, Ultimate: 200K |
+| Tuple elements | 127 | Combined limit for all `request.*` calls |
 
-**Note**: Identical `request.*()` calls reuse data and count as one.
+**Note**: 
+- Identical `request.*()` calls reuse data and count as one.
+- Pine v6 enables **dynamic requests** by default, allowing series string arguments in `request.*` calls.
 
-### Size Limits
+## Max Bars Back
 
-| Element | Limit |
-|---------|-------|
-| Compiled script size | 80 KB |
-| Local scopes | 500 |
-| Array/map/matrix elements | 100,000 |
+The history-referencing operator `[]` depends on the historical buffer size:
+- **Most series**: 5,000 bars.
+- **OHLC/Time series**: 10,000 bars.
+- **Drawings**: 10,000 bars in the past (using `xloc.bar_index`).
 
-### Strategy Limits
+Exceeding these limits causes a runtime error. Use `max_bars_back()` or the `max_bars_back` parameter in `indicator()`/`strategy()` to adjust buffer sizes.
+
+## Strategy Limits
 
 | Element | Limit |
 |---------|-------|
 | Open trades | 10,000 |
-| Orders per bar | Limited |
+| Orders per bar | Limited by execution engine |
+
+---
+
+## Pine Profiler (Optimization Tool)
+
+The **Pine Profiler** is the primary tool for identifying performance bottlenecks. It analyzes the execution time of significant code lines and blocks.
+
+### Enabling the Profiler
+1. Add your script to the chart.
+2. Open the Pine Editor.
+3. Click the **"More"** (three dots) menu in the top-right.
+4. Toggle **"Profiler mode"** ON.
+
+### Interpreting Results
+- **Bars & Percentages**: Appear to the left of code lines, showing relative runtime impact.
+- **Flame Icons**: Mark the top 3 highest-impact code regions ("bottlenecks").
+- **Tooltips**: Hover over the percentage to see:
+    - **Time**: Total time spent on the line/block across all executions.
+    - **Executions**: Number of times the line/block was executed.
+    - **Line Time**: (For blocks) Time spent on the initial line or all conditional expressions.
+
+### Optimization Techniques from Profiling
+- **Conditional Calculations**: Wrap expensive logic in `if` blocks so they only run when needed.
+- **Use `var`**: Calculate values once on the first bar if they don't change.
+- **Built-in Functions**: Prefer `ta.sma()` over manual loops; built-ins are highly optimized.
+- **Reduce Drawings**: Delete old drawing objects or use `max_lines_count` to let Pine handle it.
+
+---
 
 ## Debugging Techniques
 
-### Pine Logs (Primary Debug Tool)
+### Pine Logs
 
 ```pine
 //@version=6
@@ -64,125 +110,58 @@ myValue = ta.sma(close, 14)
 log.info("SMA value: {0}", myValue)
 log.warning("Check this: {0}", myValue)
 log.error("Problem: {0}", myValue)
-
-// Works anywhere - global scope, functions, loops
-for i = 0 to 9
-    log.info("Index {0}: {1}", i, close[i])
 ```
 
-**Pine Logs Features:**
-- View in Pine Logs panel (Ctrl+`)
-- Click "Source code" to jump to log statement
-- Click "Scroll to bar" to navigate chart
-- Filter by level, date, search text
-- Only works in personal scripts (not published)
-- Limit: 10,000 historical logs
+**Pine Logs Behavior:**
+- **Historical Bars**: Limit of 10,000 logs.
+- **Realtime Bars**: Logs accumulate until the script restarts (no fixed limit).
+- **Libraries**: Published libraries can contain `log.*` calls, but they only generate logs when used in a *personal* script. Published scripts never generate logs.
+- **Features**: "Source code" jump, "Scroll to bar" navigation, and filtering by level/date/text.
 
 ### Visual Debugging
 
 #### Plot Values
 ```pine
-// Plot numeric values
-plot(myCalculation, "Debug Value")
-
 // Plot in Data Window only (no chart clutter)
 plot(myValue, "Hidden Debug", display=display.data_window)
-```
-
-#### Color Conditions
-```pine
-// Highlight bars meeting condition
-bgcolor(myCondition ? color.new(color.yellow, 80) : na)
-
-// Color bars
-barcolor(close > open ? color.green : color.red)
 ```
 
 #### Labels for Strings
 ```pine
 if barstate.islast
-    label.new(bar_index, high, 
-              "Debug: " + str.tostring(myValue) + "\n" +
-              "State: " + myState,
-              style=label.style_label_down)
+    label.new(bar_index, high, "State: " + myState)
 ```
 
-### Debug Pattern: Print Function
-```pine
-//@function Debug helper - displays string on last bar
-//@param msg The message to display
-print(string msg) =>
-    var label lbl = label.new(na, na, "", xloc=xloc.bar_time)
-    if barstate.islast
-        label.set_xy(lbl, time, high)
-        label.set_text(lbl, msg)
-
-// Usage
-print("Value: " + str.tostring(myValue))
-```
-
-### Tables for Multi-Value Debug
-```pine
-var table debugTable = table.new(position.top_right, 2, 10)
-
-if barstate.islast
-    table.cell(debugTable, 0, 0, "Variable", bgcolor=color.gray)
-    table.cell(debugTable, 1, 0, "Value", bgcolor=color.gray)
-    table.cell(debugTable, 0, 1, "SMA")
-    table.cell(debugTable, 1, 1, str.tostring(mySma))
-    table.cell(debugTable, 0, 2, "RSI")
-    table.cell(debugTable, 1, 2, str.tostring(myRsi))
-```
+---
 
 ## Common Errors & Solutions
 
 ### "Script has too many local scopes"
-- Reduce nested if/for/while blocks
-- Extract logic into functions
-- Simplify conditional chains
+- **Cause**: Exceeded the 500 local scope limit.
+- **Fix**: Reduce nested `if/for/while` blocks; extract logic into functions.
+
+### "Script has too many local variables"
+- **Cause**: Exceeded 1,000 variables in a single scope (explicit + implicit).
+- **Fix**: Combine expressions (e.g., `var3 = expr1 + expr2` instead of `var1=expr1, var2=expr2, var3=var1+var2`).
+
+### "The if statement is too long"
+- **Cause**: Local block inside an `if` is too large for the compiler.
+- **Fix**: Move the logic into a function.
 
 ### "Loop takes too long to execute"
-- Reduce iteration count
-- Use built-in functions instead of loops
-- Cache repeated calculations
+- **Cause**: Exceeded 500ms on a single bar.
+- **Fix**: Reduce iteration count; use built-ins; cache repeated calculations.
 
-### "Script requests too much data"
-- Reduce `request.*()` calls
-- Combine requests where possible
-- Use tuple returns for multiple values
+### "The requested historical offset (X) is beyond the historical buffer's limit (Y)"
+- **Cause**: Accessing `series[n]` where `n` is larger than the detected buffer.
+- **Fix**: Use `max_bars_back(series, n)` to force a larger buffer.
 
 ### "Max plot count exceeded"
-- Remove unused plots
-- Combine related data into single plot
-- Use `display.none` for hidden calculations
-
-## Performance Optimization
-
-### Conditional Calculations
-```pine
-// Only calculate when needed
-expensiveCalc = needIt ? doExpensiveCalc() : na
-```
-
-### Limit Drawing Objects
-```pine
-// Delete old objects
-if array.size(myLines) > 50
-    line.delete(array.shift(myLines))
-```
-
-### Use Built-ins
-```pine
-// SLOW: Manual loop
-sum = 0.0
-for i = 0 to 99
-    sum += close[i]
-avg = sum / 100
-
-// FAST: Built-in
-avg = ta.sma(close, 100)
-```
+- **Cause**: More than 64 plot-generating functions.
+- **Fix**: Combine plots; use `display.none` for calculations that don't need visuals.
 
 **References**:
 - `pine-script-docs/writing/limitations.html` - Script limits
 - `pine-script-docs/writing/debugging.html` - Debug techniques
+- `pine-script-docs/writing/profiling-and-optimization.html` - Profiler & Optimization
+- `pine-script-docs/error-messages.html` - Error explanations
