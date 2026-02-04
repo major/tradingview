@@ -51,6 +51,32 @@ var counter2 = 0      // Increments: 1, 2, 3... (persists across bars)
 varip counter3 = 0    // Counts every tick (WARNING: repaints during realtime bar)
 ```
 
+### Scope
+
+Variables have different accessibility depending on where they're declared:
+
+| Scope | Accessible From | Lifetime |
+|-------|-----------------|----------|
+| **Global** | Anywhere in script | Entire script execution |
+| **Function** | Only inside that function | Function call only |
+| **Loop/Conditional** | Only inside that block | Block execution only |
+
+```pine
+globalVar = 10  // Accessible everywhere
+
+myFunc() =>
+    localVar = 5  // Only accessible inside myFunc
+    localVar * 2
+
+if condition
+    blockVar = 3  // Only accessible inside this if block
+    plot(blockVar)
+
+// plot(blockVar)  // Error! blockVar not accessible here
+```
+
+**Important**: Variables declared inside functions, loops, or conditionals are **local** to that scope. They cannot be accessed outside their block. Use global variables (declared at script level) when you need to share data across functions or blocks.
+
 ## Operators
 
 ### Arithmetic
@@ -63,6 +89,11 @@ a % b    // Modulo (remainder)
 ```
 
 **Division Note**: Pine Script division always returns a float, even when dividing integers. If you need integer division, use `int(a / b)` to truncate.
+
+**Modulo Note**: The modulo operator calculates remainder using the formula: `a - b * floor(a/b)`. This means:
+- `7 % 3 = 1` (because 7 - 3 * floor(7/3) = 7 - 3 * 2 = 1)
+- `-7 % 3 = 2` (because -7 - 3 * floor(-7/3) = -7 - 3 * (-3) = 2)
+- Modulo with negative numbers may produce unexpected results; use `abs()` if you need traditional behavior
 
 ### Comparison
 ```pine
@@ -129,6 +160,8 @@ else if otherCondition
 else
     doDefault()
 ```
+
+**Indentation**: Pine Script requires **4 spaces or 1 tab** for indentation inside conditional blocks. Inconsistent indentation will cause syntax errors.
 
 ### if as Expression
 ```pine
@@ -256,9 +289,33 @@ avg = ta.sma(close, length)
 ```
 
 **Use loops for**:
-- Iterating collections (arrays, maps, matrices)
-- Custom calculations not in built-ins
-- Variable lookback based on runtime conditions (e.g., `for i = 0 to userLength`)
+
+1. **Iterating collections** (arrays, maps, matrices):
+   ```pine
+   myArray = array.from(10, 20, 30, 40, 50)
+   for value in myArray
+       plot(value)
+   ```
+
+2. **Custom calculations not in built-ins**:
+   ```pine
+   // Calculate weighted moving average with custom weights
+   weights = array.from(0.5, 0.3, 0.2)
+   sum = 0.0
+   for [i, w] in weights
+       sum += close[i] * w
+   wma = sum
+   ```
+
+3. **Variable lookback based on runtime conditions**:
+   ```pine
+   // Sum closes for a user-specified number of bars
+   userLength = input(10, "Lookback Period")
+   sum = 0.0
+   for i = 0 to userLength - 1
+       sum += close[i]
+   avg = sum / userLength
+   ```
 
 ## User-Defined Functions
 
@@ -333,6 +390,26 @@ badFunc() =>
 // CORRECT: Return new value
 goodFunc(int val) =>
     val + 1
+```
+
+**Built-in Functions Not Callable from User Functions**: The following built-in functions cannot be called from inside user-defined functions:
+- **Plotting**: `plot()`, `plotshape()`, `plotchar()`, `plotarrow()`, `plotcandle()`, `plotbar()`, `barcolor()`, `bgcolor()`, `fill()`, `hline()`
+- **Alerts**: `alertcondition()`
+- **Script Declaration**: `indicator()`, `strategy()`, `library()`
+- **Request Functions**: `request.security()` (with certain parameters)
+
+**Workaround**: Calculate values in functions, then plot/alert at the global scope:
+```pine
+// WRONG
+myFunc() =>
+    plot(close)  // Error!
+
+// CORRECT
+myFunc() =>
+    close * 2    // Return value
+
+result = myFunc()
+plot(result)     // Plot at global scope
 ```
 
 ## User-Defined Types (Objects)
@@ -483,3 +560,5 @@ for sig in signals
 5. **Avoid varip** unless specifically needed for tick counting
 6. **Use UDTs** to group related data (trades, signals, levels)
 7. **Use enums** for fixed sets of options (signal types, states)
+8. **Respect scope** — declare variables at the appropriate level (global vs local)
+9. **Avoid modifying globals** — return values from functions instead
