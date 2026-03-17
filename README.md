@@ -6,7 +6,7 @@ Enjoy this collection of open source Pine Script indicators for TradingView.
 
 ### 👀 [HVC Watcher](hvc_watcher/)
 
-Watches for High Volume Close patterns and tracks unusual volume activity with optional time filtering in NYC timezone. This enhanced version of the HVC Finder provides more flexible monitoring capabilities and time-based filtering for intraday analysis.
+Spots High Volume Closes (HVCs) on your chart and draws support/resistance zones around them. An HVC fires when a bar's volume hits a configurable multiple of its moving average, with optional multiplier labels and alerts.
 
 ### 🔮 [Relative Strength Leadership](relative_strength_leadership/)
 
