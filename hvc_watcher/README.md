@@ -1,60 +1,45 @@
 # HVC Watcher 🔍
 
-Watch for High Volume Closes (HVC) and unusual volume patterns with this comprehensive indicator!
+Watch for High Volume Closes (HVC) and unusual volume patterns.
 
 ## Features
 
 ### Volume Pattern Detection
-* **Highest volumes ever** - Green markers for all-time high volume bars 🟢
-* **High volume spikes** - Yellow markers for volume greater than 3x the SMA (configurable) 🟡
-* **Low volume periods** - Red markers for volume under 50% of the SMA (configurable) 🔴
+* **High Volume Close (HVC)** 🟠 markers when volume exceeds a configurable multiple of the SMA (default: 3.0x)
+* **Highest Volume Ever (HVE)** 🟢 markers for all-time high volume bars (disabled by default)
+* HVE takes priority over HVC to avoid overlapping markers. When HVE display is disabled, bars that are both HVC and HVE still display as HVC.
 
-### Volume Filtering ⏰
-Filter volume analysis to specific trading hours (NYC timezone):
-* Works on both **intraday** and **daily** timeframes
-* For intraday charts: filters based on bar time
-* For daily charts: aggregates lower timeframe data within the time window
-* Default filter: 10:30 - 15:00 NYC time
+### HVC Zones
+* Horizontal zones marking the high/low range of HVC bars for support/resistance
+* Fixed length (default: 90 bars) or extend to the right edge of the chart
+* Configurable zone color and transparency for both fill and edges
 
-### HVC Streak Tracker 📊
-Monitor momentum in High Volume Close events:
-* **Automatic streak detection** - Tracks consecutive HVCs trending in the same direction
-* **Directional indicators** - Shows whether HVCs are closing higher ⬆️ or lower ⬇️
-* **Real-time updates** - See the current streak count as new HVCs occur
-* Example: "Last 5 HVCs ⬆️ up" indicates 5 consecutive HVCs with increasing close prices
-
-### Info Panel Display 📋
-Unified information panel showing active features:
-* **Configurable position** - Place in any corner or center position (default: top center)
-* **Dynamic content** - Shows HVC streak and/or time filter info as enabled
-* **Compact design** - Single panel with separator when both features are active
-* **Visual feedback** - Background color changes based on streak direction:
-  - 🟢 Soft green background when HVCs are trending up
-  - 🔴 Soft red background when HVCs are trending down
-  - ⚫ Black background when no streak or showing time filter only
-* Example: "📊 Last 3 HVCs ⬆️ up  |  ⏰ Filter: 10:30 - 15:00 (NYC)"
+### Volume Multiplier Labels
+* Optional labels showing the exact volume multiplier (e.g., "5x") next to HVC bars
+* Optional real-time multiplier for the current (incomplete) bar
 
 ### Customization Options
-* **SMA Length** - Adjust the moving average period (default: 20)
-* **Volume Multiplier** - Set the threshold for high volume detection (default: 3.0x)
-* **Low Volume Threshold** - Define what constitutes low volume (default: 0.5x SMA)
+* **SMA Length** - Moving average period (default: 20)
+* **HVC Multiplier Threshold** - Volume must be at least this many times the SMA (default: 3.0x)
+* **Show HVE Markers** - Toggle Highest Volume Ever markers (default: off)
 * **Shape Styles** - Choose from circles, triangles, diamonds, crosses, or X-crosses
-* **Priority Mode** - Show only the highest priority marker per bar
-* **Rectangle Overlays** - Highlight high volume periods with colored rectangles
-* **Multiplier Labels** - Display exact volume multiplier values
-* **Real-Time Current Bar** - Track the current bar's volume multiplier in real-time
+* **Zone Settings** - Toggle zones, extend right, fixed length, color, and transparency
+* **Multiplier Labels** - Toggle HVC and current bar multiplier labels with custom colors
 
 ### Alert Support 🔔
-* All-time high volume alerts
-* High volume spike alerts
+* Highest Volume Ever (HVE) alert
+* High Volume Close (HVC) alert
+* Combined HVE or HVC alert
+
+### Data Window
+Volume, Volume SMA, and HVE Threshold are available in TradingView's data window for inspection.
 
 ## How to Use
 
-1. **Enable Time Filter** (optional): Turn on volume filtering to focus on specific trading hours
-2. **Monitor HVC Streaks**: Watch the streak tracker table to identify momentum in high volume events
-3. **Adjust Settings**: Customize thresholds, colors, and display options to match your trading style
-4. **Watch for Markers**: Green = exceptional volume, Yellow = high volume, Red = unusually low volume
-5. **Set Alerts**: Configure TradingView alerts for volume spikes
+1. **Watch for markers**: Orange circles above bars indicate High Volume Closes
+2. **Enable HVE** (optional): Turn on Highest Volume Ever markers to spot all-time volume records
+3. **Use zones**: HVC zones highlight price ranges where high volume occurred, useful as support/resistance
+4. **Adjust thresholds**: Tune the SMA length and multiplier threshold to match your trading style
+5. **Set alerts**: Configure TradingView alerts for HVC, HVE, or both
 
 All settings are fully configurable. Enjoy! 🤓
-
