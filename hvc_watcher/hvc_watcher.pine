@@ -20,8 +20,10 @@ sma_length = input.int(20, title = 'Volume SMA Length', minval = 1, group = 'Vol
 volume_multiplier = input.float(3.0, title = 'HVC Multiplier Threshold', minval = 1.0, step = 0.1, group = 'Volume Settings', tooltip = 'Volume must be at least this many times the SMA to trigger a High Volume Close (HVC)')
 
 // Marker settings
+color_hve = input.color(color.green, title = 'HVE Color', group = 'Markers', tooltip = 'Color for Highest Volume Ever (HVE) markers - bars with the highest volume seen on the chart')
 color_hvc = input.color(color.orange, title = 'HVC Color', group = 'Markers', tooltip = 'Color for High Volume Close (HVC) markers - bars where volume exceeds the SMA threshold')
 shape_style = input.string('circles', title = 'Shape Style', options = ['circles', 'triangleup', 'diamond', 'cross', 'xcross'], group = 'Markers')
+priority_mode = input.bool(true, title = 'Priority Mode', group = 'Markers', tooltip = 'When enabled, only shows the highest priority marker (HVE > HVC) to avoid overlap')
 
 // Zone settings
 show_zones = input.bool(true, title = 'Show HVC Zones', group = 'Zones', tooltip = 'Draw horizontal zones marking the high/low range of HVC bars')
@@ -42,6 +44,11 @@ current_text_color = input.color(color.white, title = 'Current Bar Label Text', 
 // Calculate volume SMA
 volume_sma = ta.sma(volume, sma_length)
 
+// Check for all-time highest volume
+var float hve_threshold = 0
+hve_threshold := math.max(hve_threshold, nz(volume[1], 0))
+is_hve = volume > hve_threshold and volume > 0
+
 // Check for volume at least X times the SMA
 is_hvc = volume >= volume_sma * volume_multiplier
 
@@ -60,6 +67,14 @@ getShape(style) =>
 
 selected_shape = getShape(shape_style)
 
+// Determine which markers to show based on priority mode
+// Priority: HVE > HVC
+show_hve = is_hve
+show_hvc = priority_mode ? is_hvc and not is_hve : is_hvc
+
+// Combined HVE or HVC detection
+is_hve_or_hvc = is_hve or is_hvc
+
 // Plot volume multiplier labels if enabled
 if show_multiplier_labels and is_hvc and volume_sma > 0
     multiplier_rounded = math.round(volume_multiplier_value)
@@ -70,14 +85,18 @@ if show_multiplier_labels and is_hvc and volume_sma > 0
               style = label.style_label_right,
               size = size.normal)
 
-plotshape(series = is_hvc, location = location.abovebar, style = selected_shape, size = size.tiny, color = color_hvc, title = 'HVC (High Volume Close)')
+plotshape(series = show_hve, location = location.abovebar, style = selected_shape, size = size.tiny, color = color_hve, title = 'HVE (Highest Volume Ever)')
+plotshape(series = show_hvc, location = location.abovebar, style = selected_shape, size = size.tiny, color = color_hvc, title = 'HVC (High Volume Close)')
 
 // Add alerts
-alertcondition(is_hvc, title = 'HVC', message = 'High Volume Close detected on {{ticker}}')
+alertcondition(is_hve, title = 'HVE', message = 'Highest Volume Ever detected on {{ticker}}')
+alertcondition(show_hvc, title = 'HVC', message = 'High Volume Close detected on {{ticker}}')
+alertcondition(is_hve_or_hvc, title = 'HVE or HVC', message = 'HVE or HVC detected on {{ticker}}')
 
 // Display current values in data window
 plot(volume, title = 'Volume', display = display.data_window)
 plot(volume_sma, title = 'Volume SMA', display = display.data_window)
+plot(hve_threshold, title = 'HVE Threshold', display = display.data_window)
 
 // Draw zones on HVC days using linefill
 if show_zones and is_hvc
