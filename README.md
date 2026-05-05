@@ -4,6 +4,10 @@ Enjoy this collection of open source Pine Script indicators for TradingView.
 
 ## Indicators 🎯
 
+### 🟢 [IBD Power Trend](ibd_power_trend/)
+
+Tracks IBD-style Power Trend start, Almost Power Trend watchlist, and stop conditions for stocks and ETFs. The indicator plots configurable-color zero-line circles, includes TradingView alerts, and exposes numeric outputs for Pine Screener filtering.
+
 ### 👀 [HVC Watcher](hvc_watcher/)
 
 Watches for High Volume Close patterns and tracks unusual volume activity with optional time filtering in NYC timezone. This enhanced version of the HVC Finder provides more flexible monitoring capabilities and time-based filtering for intraday analysis.

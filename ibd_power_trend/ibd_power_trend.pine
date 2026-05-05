@@ -1,0 +1,110 @@
+// Copyright 2026 Major Hayden
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//@version=6
+indicator('IBD Power Trend', shorttitle = 'PowerTrend', overlay = false, precision = 0, max_bars_back = 250)
+
+// ═══════════════════════════════════════════════════════════════
+// INPUTS
+// ═══════════════════════════════════════════════════════════════
+
+grpSignal = 'Signal Settings'
+emaLength = input.int(21, title = 'EMA Length', minval = 1, group = grpSignal, tooltip = 'Fast moving average used by the Power Trend rules')
+smaLength = input.int(50, title = 'SMA Length', minval = 1, group = grpSignal, tooltip = 'Slow moving average used by the Power Trend rules')
+lowAboveEmaDays = input.int(10, title = 'Low Above EMA Days', minval = 1, group = grpSignal, tooltip = 'Number of trading days where each bar low must stay above the fast EMA')
+emaAboveSmaDays = input.int(5, title = 'EMA Above SMA Days', minval = 2, group = grpSignal, tooltip = 'Number of trading days where the fast EMA must stay above the slow SMA before a full Power Trend can begin')
+smaRisingLookback = input.int(5, title = 'SMA Rising Lookback', minval = 1, group = grpSignal, tooltip = 'Slow SMA must be higher than it was this many trading days ago')
+highLookback = input.int(63, title = 'Recent High Lookback', minval = 1, group = grpSignal, tooltip = 'Lookback used for the Power Trend sell-off stop rule')
+highDrawdownPercent = input.float(10.0, title = 'Recent High Drawdown (%)', minval = 0.1, maxval = 100.0, step = 0.1, group = grpSignal, tooltip = 'Power Trend ends when close is at least this far below the recent high and below the slow SMA')
+
+grpVisual = 'Visual Settings'
+showPowerTrendMarkers = input.bool(true, title = 'Show Power Trend Circles', group = grpVisual, tooltip = 'Show circles while the Power Trend is active')
+showSetupWarningMarkers = input.bool(true, title = 'Show Almost Power Trend Circles', group = grpVisual, tooltip = 'Show yellow circles when the chart is close enough to a Power Trend to watch closely')
+powerTrendColor = input.color(color.lime, title = 'Power Trend Color', group = grpVisual)
+almostPowerTrendColor = input.color(color.yellow, title = 'Almost Power Trend Color', group = grpVisual)
+showZeroLine = input.bool(true, title = 'Show Zero Line', group = grpVisual)
+
+// ═══════════════════════════════════════════════════════════════
+// CALCULATIONS
+// ═══════════════════════════════════════════════════════════════
+
+ema21 = ta.ema(close, emaLength)
+sma50 = ta.sma(close, smaLength)
+
+// Each bar's low must be above that same bar's EMA for the full lookback. The
+// almost signal allows one missing day because these charts are worth watching
+// before every rule is perfect.
+lowAboveEmaCount = math.sum(low >= ema21 ? 1 : 0, lowAboveEmaDays)
+lowAboveEma = lowAboveEmaCount == lowAboveEmaDays
+lowAboveEmaAlmost = lowAboveEmaCount >= lowAboveEmaDays - 1
+
+// The fast EMA must stay above the slow SMA for the full lookback. A one-day
+// shorter run is close enough for a watchlist warning.
+emaAboveSmaCurrent = ema21 > sma50
+emaAboveSmaCount = math.sum(emaAboveSmaCurrent ? 1 : 0, emaAboveSmaDays)
+emaAboveSma = emaAboveSmaCount == emaAboveSmaDays
+emaAboveSmaAlmost = emaAboveSmaCount >= emaAboveSmaDays - 1
+
+// Compare the slow SMA to several trading days ago to avoid reacting to a one-bar wiggle.
+smaRising = sma50 > sma50[smaRisingLookback]
+closeUp = close > close[1]
+
+startPowerTrend = lowAboveEma and emaAboveSma and smaRising and closeUp
+almostPowerTrendSetup = lowAboveEmaAlmost and emaAboveSmaAlmost and smaRising and not startPowerTrend
+
+emaCrossedBelowSma = ta.crossunder(ema21, sma50)
+recentHigh = ta.highest(high, highLookback)
+drawdownStop = close < recentHigh * (1.0 - highDrawdownPercent / 100.0) and close < sma50
+endPowerTrend = emaCrossedBelowSma or drawdownStop
+
+var bool powerTrend = false
+if startPowerTrend
+    powerTrend := true
+if endPowerTrend
+    powerTrend := false
+
+newPowerTrend = powerTrend and not powerTrend[1]
+almostPowerTrend = almostPowerTrendSetup and not powerTrend
+newAlmostPowerTrend = almostPowerTrend and not almostPowerTrend[1]
+
+showPowerMarker = powerTrend and showPowerTrendMarkers
+showSetupMarker = almostPowerTrend and showSetupWarningMarkers
+markerValue = showPowerMarker or showSetupMarker ? 0 : na
+markerColor = showPowerMarker ? powerTrendColor : showSetupMarker ? almostPowerTrendColor : na
+
+// ═══════════════════════════════════════════════════════════════
+// VISUAL OUTPUT
+// ═══════════════════════════════════════════════════════════════
+
+hline(0, title = 'Zero Line', color = showZeroLine ? color.new(color.gray, 70) : color.new(color.gray, 100), editable = false)
+
+// Screener-friendly numeric outputs. Keep the two primary booleans first so they
+// are easy to filter in Pine Screener.
+plot(powerTrend ? 1 : 0, title = 'Power Trend Active', display = display.data_window, editable = false)
+plot(almostPowerTrend ? 1 : 0, title = 'Almost Power Trend', display = display.data_window, editable = false)
+plot(newPowerTrend ? 1 : 0, title = 'New Power Trend', display = display.data_window, editable = false)
+plot(newAlmostPowerTrend ? 1 : 0, title = 'New Almost Power Trend', display = display.data_window, editable = false)
+plot(lowAboveEma ? 1 : 0, title = 'Low Above EMA', display = display.data_window, editable = false)
+plot(emaAboveSma ? 1 : 0, title = 'EMA Above SMA', display = display.data_window, editable = false)
+plot(smaRising ? 1 : 0, title = 'SMA Rising', display = display.data_window, editable = false)
+plot(closeUp ? 1 : 0, title = 'Close Up', display = display.data_window, editable = false)
+
+plot(markerValue, title = 'Power Trend Circles', color = markerColor, linewidth = 4, style = plot.style_circles, editable = false)
+
+// ═══════════════════════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════════════════════
+
+alertcondition(newPowerTrend, title = 'New IBD Power Trend', message = '{{ticker}}: New IBD Power Trend started')
+alertcondition(newAlmostPowerTrend, title = 'IBD Almost Power Trend', message = '{{ticker}}: IBD Power Trend setup is close enough to watch closely')
