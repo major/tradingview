@@ -24,6 +24,10 @@ Detects market fragility, compression periods, and low volatility environments t
 
 Highlights highest, lowest, and above-average volume bars with an SMA overlay for context. This straightforward volume analysis tool makes it easy to spot volume extremes and compare current volume to historical averages at a glance.
 
+### 📍 [IPO Day Anchored VWAP](ipo_vwap/)
+
+Automatically anchors a VWAP to a ticker's IPO date or first trading day, with optional standard deviation bands. Ideal for tracking long-term price averages from market debut, with manual override for intraday charts.
+
 ### ⏰ [Volume Filter Percentage](volume_filter_percentage/)
 
 Analyzes and filters volume by specific time periods in NYC timezone, showing what percentage of volume occurs during your chosen time window. Includes an [overlay version](volume_filter_percentage/volume_filter_percentage_overlay.pine) that adds visual markers directly on price charts for filtered volume patterns.

@@ -164,3 +164,6 @@ cython_debug/
 opencode.json
 .sisyphus/
 pine-script-docs
+
+# Deepwork scratch state (not versioned)
+.slim/deepwork/

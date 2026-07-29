@@ -1,0 +1,69 @@
+// Copyright 2026 Major Hayden
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//@version=6
+indicator('IPO Day Anchored VWAP', shorttitle='IPO VWAP', overlay=true)
+
+// === VWAP SETTINGS ===
+grpVWAP = 'VWAP Settings'
+vwapSource = input.source(hlc3, 'Source', group=grpVWAP, tooltip='Automatic IPO-day detection is reliable on Daily and higher timeframes only. On intraday charts, enable manual anchor date instead.')
+
+// === MANUAL ANCHOR ===
+grpManual = 'Manual Anchor'
+useManualAnchor = input.bool(false, 'Use Manual Anchor Date', group=grpManual)
+manualAnchorTime = input.time(timestamp('2020-01-01'), 'Anchor Date/Time', group=grpManual)
+
+// === DISPLAY ===
+grpDisplay = 'Display'
+showIPOLabel = input.bool(true, 'Show IPO Label', group=grpDisplay)
+
+// === ANCHOR LOGIC ===
+// Auto mode: anchor on first bar (bar_index == 0)
+autoAnchor = bar_index == 0
+
+// Manual mode: latch on first bar where time >= manualAnchorTime
+var bool manualAnchorFired = false
+manualAnchor = false
+if useManualAnchor and not manualAnchorFired and time >= manualAnchorTime
+    manualAnchorFired := true
+    manualAnchor := true
+
+// Choose active anchor: manual overrides auto
+activeAnchor = useManualAnchor ? manualAnchor : autoAnchor
+
+// === VWAP CALCULATION ===
+vwapValue = ta.vwap(vwapSource, activeAnchor)
+
+// === PLOTTING ===
+// Color/thickness are left as plot() literals so TradingView exposes them
+// in the indicator's built-in "Style" tab instead of the "Inputs" tab.
+plot(vwapValue, 'VWAP', color=color.aqua, linewidth=2)
+
+// === ANCHOR LABEL ===
+if showIPOLabel and activeAnchor
+    labelText = useManualAnchor ? 'Anchor' : 'IPO'
+    label.new(bar_index, low, labelText, style=label.style_label_up, color=color.red, textcolor=color.white, size=size.small)
+
+// === RIGHT-EDGE LABEL ===
+// Small label tracking the current end of the VWAP line, so it's easy to
+// spot on busy charts. Created once, repositioned every bar while it's live.
+var label vwapEdgeLabel = na
+if showIPOLabel
+    if na(vwapEdgeLabel)
+        vwapEdgeLabel := label.new(bar_index, vwapValue, 'IPO', style=label.style_label_left, color=color.red, textcolor=color.white, size=size.small)
+    if barstate.islast
+        label.set_xy(vwapEdgeLabel, bar_index + 1, vwapValue)
+
+// === ALERT ===
+alertcondition(ta.cross(close, vwapValue), title='Price Crosses VWAP', message='{{ticker}}: Price crossed IPO VWAP')
