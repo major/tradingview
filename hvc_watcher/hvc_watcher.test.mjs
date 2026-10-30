@@ -40,10 +40,10 @@ async function runIndicator(volumes, inputs = {}, { rawContext = false, unconfir
     return Object.fromEntries(Object.entries(context.plots).map(([name, plot]) => [name, plot.data.map(point => point.value)]));
 }
 
-for (const timeframe of ['1', 'D', '2D', 'W', '2W', 'M', '3M', '12M']) {
+for (const [timeframe, multiplier] of [['1', 3], ['D', 3], ['2D', 3], ['W', 2], ['2W', 2], ['M', 2], ['3M', 2], ['12M', 2]]) {
     test(`${timeframe} uses the default multiplier with an inclusive boundary`, async () => {
-        // Arrange: a four-bar SMA reaches exactly 3x at volume 90.
-        const boundary = 90;
+        // Arrange: a four-bar SMA reaches 3x at volume 90, or 2x at volume 30.
+        const boundary = multiplier === 3 ? 90 : 30;
         const inputs = { sma_length: 4, hvc_threshold: null };
 
         for (const offset of [-1, 0, 1]) {
@@ -52,8 +52,22 @@ for (const timeframe of ['1', 'D', '2D', 'W', '2W', 'M', '3M', '12M']) {
 
             // Assert
             assert.deepEqual(plots['HVC Signal'], [0, 0, 0, offset < 0 ? 0 : 1]);
-            assert.equal(plots['HVC Comparison Threshold'][3], plots['Volume SMA'][3] * 3);
+            assert.equal(plots['HVC Comparison Threshold'][3], plots['Volume SMA'][3] * multiplier);
         }
+    });
+}
+
+for (const [timeframe, multiplier] of [['1', 1.5], ['D', 1.5], ['2D', 1.5], ['W', 2.5], ['2W', 2.5], ['M', 3.5], ['3M', 3.5], ['12M', 3.5]]) {
+    test(`${timeframe} selects its independently configured multiplier`, async () => {
+        // Arrange: distinct thresholds expose accidental reuse of another timeframe's input.
+        const inputs = { sma_length: 4, hvc_threshold: 1.5, hvc_threshold_weekly: 2.5, hvc_threshold_monthly: 3.5 };
+
+        // Act
+        const plots = await runIndicator([10, 10, 10, 90], inputs, { timeframe });
+
+        // Assert: both the diagnostic and shared signal use the selected threshold.
+        assert.equal(plots['HVC Comparison Threshold'][3], 30 * multiplier);
+        assert.deepEqual(plots['HVC Signal'], [0, 0, 0, multiplier <= 3 ? 1 : 0]);
     });
 }
 
