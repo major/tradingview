@@ -16,10 +16,14 @@ function replaceInput(source, name, value) {
 }
 
 /** Run the complete indicator with synthetic daily volume and explicit input overrides. */
-async function runIndicator(volumes, inputs = {}, { rawContext = false } = {}) {
+async function runIndicator(volumes, inputs = {}, { rawContext = false, unconfirmed = [] } = {}) {
     let source = await readFile(sourcePath, 'utf8');
     for (const [name, value] of Object.entries({ sma_length: 3, hvc_threshold: 2.0, ...inputs })) {
         source = replaceInput(source, name, value);
+    }
+    if (unconfirmed.length) {
+        const confirmed = unconfirmed.map(index => `bar_index != ${index}`).join(' and ');
+        source = source.replaceAll('barstate.isconfirmed', `(barstate.isconfirmed and ${confirmed})`);
     }
     source += '\nplot(is_hvc ? 1 : 0, title = "Test HVC")\nplot(is_hve ? 1 : 0, title = "Test HVE")\nplot(volume_multiplier, title = "Test multiplier")\n';
     const bars = volumes.map((volume, index) => ({
@@ -200,3 +204,61 @@ for (const showLive of [false, true]) {
         }
     });
 }
+
+for (const confirmOnClose of [false, true]) {
+    for (const showHve of [false, true]) {
+        test(`unconfirmed outputs share timing (${confirmOnClose}) independent of HVE display (${showHve})`, async () => {
+            // Arrange: simulate an unfinished bar without pretending to simulate realtime rollback.
+            const inputs = { confirm_on_close: confirmOnClose, show_hve_markers: showHve, show_multiplier_labels: true, show_current_multiplier: true };
+
+            // Act
+            const context = await runIndicator([10, 10, 40], inputs, { unconfirmed: [2], rawContext: true });
+
+            // Assert: historical labels, zones, public flags, and markers share the close gate.
+            const values = name => context.plots[name].data.map(point => point.value);
+            assert.deepEqual(values('HVC Signal'), [0, 0, confirmOnClose ? 0 : 1]);
+            assert.deepEqual(values('HVE Signal'), [1, 0, confirmOnClose ? 0 : 1]);
+            assert.deepEqual(values('HVC (High Volume Close)').map(Boolean), [false, false, !confirmOnClose && !showHve]);
+            assert.deepEqual(values('HVE (Highest Volume Ever)').map(Boolean), [showHve, false, !confirmOnClose && showHve]);
+            assert.equal(context.pine.line.all.length, confirmOnClose ? 0 : 2);
+            const labels = Array.from(context.pine.label.all);
+            assert.equal(labels.length, confirmOnClose ? 1 : 2);
+            assert.equal(labels.find(label => label.style === context.pine.label.style_label_upper_left).text, '2.0x');
+        });
+    }
+}
+
+test('confirmed mode does not change historical signals or the running HVE record', async () => {
+    // Arrange
+    const inputs = { confirm_on_close: true };
+
+    // Act
+    const historical = await runIndicator([10, 10, 40], inputs);
+    const simulated = await runIndicator([10, 10, 40, 30], inputs, { unconfirmed: [2] });
+
+    // Assert: suppressing an output must not suppress the record used on the following bar.
+    assert.deepEqual(historical['HVC Signal'], [0, 0, 1]);
+    assert.deepEqual(simulated['HVE Signal'], [1, 0, 0, 0]);
+    assert.deepEqual(simulated['HVE Threshold'], [0, 10, 10, 40]);
+});
+
+test('dependent controls and alert context are wired without changing alert titles', async () => {
+    // Arrange
+    const source = await readFile(sourcePath, 'utf8');
+
+    // Act / Assert: TradingView must validate disabled controls and alert placeholder substitution.
+    assert.match(source, /confirm_on_close = input\.bool\(false/);
+    assert.match(source, /color_hve = input\.color\([^\n]*active = show_hve_markers/);
+    assert.match(source, /zone_length = input\.int\([^\n]*active = show_zones and not zone_extend_right/);
+    for (const [name, toggle] of [['multiplier_label_color', 'show_multiplier_labels'], ['multiplier_text_color', 'show_multiplier_labels'], ['current_label_color', 'show_current_multiplier'], ['current_text_color', 'show_current_multiplier']]) {
+        assert.match(source, new RegExp(`^${name} = input\\.color\\([^\\n]*active = ${toggle}`, 'm'));
+    }
+    const alerts = source.match(/^alertcondition\(.*$/gm);
+    assert.equal(alerts.length, 3);
+    for (const alert of alerts) {
+        assert.ok(alert.includes('{{ticker}}'));
+        assert.ok(alert.includes('{{interval}}'));
+        assert.ok(alert.includes('{{close}}'));
+        assert.ok(alert.includes('{{plot("Volume Multiplier")}}'));
+    }
+});
