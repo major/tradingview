@@ -1,5 +1,86 @@
 # 📈 Mansfield Relative Strength (Weinstein Method)
 
+## 🎯 Weekly crossover overlay
+
+Use **[`mansfield_relative_strength_overlay.pine`](mansfield_relative_strength_overlay.pine)** for zero-crossing markers directly on the price chart, without a separate indicator pane. It uses Pine Script v6 and requires a **standard 1W chart**.
+
+### Calculation and signal rules
+
+The overlay calculates the stock/benchmark price ratio on each weekly bar, then normalizes it against its own **52-observation weekly SMA**:
+
+```text
+Ratio = Weekly Stock Close / Weekly Benchmark Close
+Mansfield RS = 100 × (Ratio / SMA(Ratio, 52) - 1)
+```
+
+- 🟢 A small `RS` triangle appears below a completed weekly candle when RS crosses from **at or below zero to above zero**, provided another signal is allowed.
+- 🔒 After that signal, another crossing is blocked until RS closes **strictly below the reset level**, which defaults to **−1.0**. Touching −1.0 does not reset it.
+- 🕒 A **2-week cooldown** also blocks signals on the next two weekly bars after an accepted signal. The earliest possible repeat is on the third following bar, provided RS has reset and makes a fresh upward crossing. Setting the cooldown to `0` disables only the time filter.
+- 🔁 RS may reset during cooldown. Ignored crossings do not restart the timer, consume eligibility, or queue a marker when the cooldown expires.
+- 🔁 Small dips below zero therefore do not create repeated markers. This changes signal eligibility, not the Mansfield calculation.
+- ⏳ Open weekly candles cannot generate markers, alerts, or eligibility changes. There is no additional one-week delay after a qualifying weekly close.
+- 🏁 The first valid crossover is eligible without a prior reset. A first valid reading already above zero is not a crossover.
+- 📊 The Data Window shows confirmed **Mansfield RS** to four decimal places and **Ready for Next Crossover** (`1` means both reset and cooldown rules allow a crossing on that bar; `0` means waiting for either rule, or a signal just occurred). Readiness is hidden until both current and previous weekly RS values are valid. Open-week values are hidden.
+- 👻 Both numeric plots use invisible colors and disable Style editing so only crossover markers can draw on the price chart. When updating an older instance that shows blue lines, remove it and add the updated indicator again to clear saved Style overrides.
+- 🎨 Marker and text controls live in **Inputs → Display** only, not in the Style tab. Toggle markers or just the `RS` text, and choose marker and text colors independently. Display settings do not change signals, reset/cooldown state, or alerts.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| Benchmark | `SP:SPX` | S&P 500 price index |
+| Reset Distance Below Zero | `1.0` | After a signal, require RS strictly below −1.0 before another signal |
+| Cooldown Weeks | `2` | Suppress signals on the next two weekly bars; `0` disables the cooldown |
+| Show Markers | `true` | Show the triangle and, when enabled, its text; hiding them does not disable alerts |
+| Marker Color | Lime | Color of the upward triangle |
+| Show RS Text | `true` | Show or hide `RS` text without hiding the triangle |
+| Text Color | Lime | Independent color for the `RS` text |
+
+The reset distance is measured in Mansfield RS points. RS of −1.0 means the price ratio is 1% below its 52-observation average, not that the stock lost 1%. The default is a starting choice, not an optimized threshold. Larger reset distances filter more repeat signals. At `0.0`, a strictly negative close is still required to reset; merely touching zero does not reset.
+
+Crossing and reset comparisons use **unrounded values**, not the displayed decimals. For example, RS of `+0.004` is positive and `−1.004` is below the default reset level. Four displayed decimal places help inspect these boundaries but do not change the calculation.
+
+The cooldown counts weekly chart bars, not calendar weeks with no chart bar. It does not delay the first eligible crossing. Its two-week default is a starting choice, not a backtested optimum. Markers and alerts share the same reset and cooldown rules.
+
+**Example:** RS values `−2.00, +0.20, −0.15, +0.30, −0.40, +0.10, −1.20, +0.15` produce markers only at the first `+0.20` and the final `+0.15` with the default reset.
+
+### Install and test in TradingView
+
+1. Open a US stock on a standard **1W candlestick chart** with at least 53 weeks of available history.
+2. Paste `mansfield_relative_strength_overlay.pine` into a new indicator in Pine Editor, save, and select **Add to chart**.
+3. Keep `SP:SPX`, reset distance `1.0`, and cooldown `2` for the initial check. Remove or hide the old pane indicator if you do not want that pane.
+4. Open the **Data Window** and inspect historical `RS` triangles. The current and previous weekly RS should be valid, with the previous value at or below zero and the current value above zero.
+5. Between two triangles, verify that at least one completed weekly RS was **below −1.0**. The next two weekly bars after a triangle must not have another triangle, even after a deep reset. A shallow dip and rebound should not add a triangle either.
+6. Use **Bar Replay** to advance one weekly candle at a time. Confirm the first eligible crossing, shallow-recross suppression, and rearming after a deeper dip. An open live weekly candle must not show a provisional triangle.
+7. Change reset distance to `2.0` and check that repeat signals require a deeper reset. Set it to `0.0` to permit resets on any strictly negative weekly close. Set cooldown to `0` to check depth-only filtering, then restore `2`. A blocked crossing must not produce a delayed marker if RS remains above zero when cooldown ends. Changing settings recalculates historical eligibility.
+8. Create an alert using **Mansfield RS Weekly Zero Cross** and **Once Per Bar Close**. Alerts are not created automatically and do not fire retroactively for historical markers. Recreate alerts after changing inputs because TradingView saves an alert's script/input snapshot.
+9. Switch temporarily to `1D`, `2W`, or a Heikin Ashi chart. The indicator should show a clear error instead of silently calculating a different variant.
+10. Return to `1W` and toggle the chart's dividend adjustment. The overlay's historical RS values and markers should remain unchanged because both requested price series explicitly use split adjustment only.
+11. Under **Inputs → Display**, change marker and text colors separately. Turn off **Show RS Text** and confirm triangles remain; turn off **Show Markers** and confirm both disappear. The Style tab should not offer a duplicate marker color picker. Alert and eligibility conditions must remain unchanged.
+
+### Data policy and limitations
+
+- Both legs explicitly use **regular-session, split-adjusted prices**, regardless of chart dividend settings. This is price-relative strength, not total-return relative strength.
+- Intended use is US stocks against an aligned US benchmark. Weekly chart confirmation does not guarantee that a benchmark in a different market has also closed. Cross-market calendars and session differences need separate validation.
+- Benchmark gaps are forward-filled. `ta.sma` uses 52 valid ratios and ignores missing values, so missing data can extend the warm-up beyond 52 chart weeks. Missing or nonpositive values returned by the requests are excluded. Forward-filled benchmark gaps can still produce signals using a stale benchmark close; the validity guards do not establish data freshness.
+- The overlay uses the chart's weekly context throughout. It does not request weekly values and then accidentally average repeated values on daily bars.
+- If TradingView supplies a different starting history after a reload, both initial signals and later eligibility can change because accepted signals determine subsequent reset and cooldown state. Data-provider corrections can also change history.
+- A marker is a relative-strength event, **not** a complete Weinstein Stage 2 classification or a standalone buy recommendation. Price structure, the rising 30-week MA, and volume are not evaluated here.
+
+### Automated logic tests
+
+The adjacent `.test.mjs` suite runs the production Pine source in **PineTS 0.13.1** using tiny, offline weekly fixtures. It substitutes the stock and benchmark feeds; signal-boundary cases also substitute exact RS values. Calculation and state logic otherwise come directly from the indicator, not a separately translated model.
+
+```bash
+npm install --prefix "$HOME/.cache/opencode-tmp/opencode/mansfield-pinets" --no-audit --no-fund --save-exact pinets@0.13.1
+NODE_PATH="$HOME/.cache/opencode-tmp/opencode/mansfield-pinets/node_modules" \
+  node --test mansfield_relative_strength/mansfield_relative_strength_overlay.test.mjs
+```
+
+These tests cover warm-up, the 52-ratio formula, crossing boundaries, reset thresholds, cooldown boundaries and overrides, display colors and visibility, missing data, and close-only state changes. Simulated unconfirmed bars test the confirmation gates, not TradingView's realtime rollback engine. **PineTS is not TradingView's compiler**: Pine Editor compilation, actual ticker requests, chart visuals, live/replay timing, and alert delivery still require the manual checks above.
+
+## 📚 Legacy pane indicator
+
+> ⚠️ The existing `mansfield_relative_strength.pine` is preserved unchanged. Its multi-timeframe implementation applies the SMA after requested prices are merged onto chart bars. Therefore, weekly inputs on a daily chart do **not** produce a true 52-week SMA. Use that script only when its selected timeframe matches the chart timeframe. Its older stage labels are RS-only heuristics, not complete Stage Analysis. The weekly overlay above avoids both features.
+
 A TradingView Pine Script implementation of Stan Weinstein's Mansfield Relative Strength indicator, a cornerstone of his Stage Analysis methodology for identifying market leaders and laggards.
 
 ## 📚 Background
@@ -115,15 +196,15 @@ The Mansfield RS is a critical component of Weinstein's four-stage market cycle 
 - Timeframe: `W` (Weekly)
 - MA Length: `52`
 - Stage Smoothing: `3`
-- Chart: **Any timeframe** - the indicator will use weekly data regardless!
+- Chart: **1W**. Keep the selected timeframe and chart timeframe identical.
 
 **For Daily Analysis:**
 - Timeframe: `D` (Daily)
 - MA Length: `200`
 - Stage Smoothing: `5-7` (daily data is noisier, use more smoothing)
-- Chart: **Any timeframe**
+- Chart: **1D**. Keep the selected timeframe and chart timeframe identical.
 
-**💡 Pro Tip:** View a daily chart but set Timeframe to `W` for the best of both worlds - see daily price action while analyzing weekly relative strength!
+**⚠️ Limitation:** Do not select `W` on a daily chart in the legacy script. Its SMA would count daily chart bars, not 52 weekly observations.
 
 ## 🚀 How to Use
 
@@ -171,8 +252,8 @@ This corrected and enhanced implementation includes several critical improvement
 ### 🛡️ Critical Bug Fixes
 
 **Repainting Protection:**
-- Added `lookahead=barmerge.lookahead_off` to prevent historical data changes
-- Ensures signals don't change after the fact
+- Added `lookahead=barmerge.lookahead_off` to avoid historical future leakage
+- This does not prevent developing higher-timeframe values from changing before they close
 
 **Timeframe Mismatch Fixed:**
 - **CRITICAL FIX:** Both stock and benchmark now use the same timeframe
@@ -214,11 +295,10 @@ This corrected and enhanced implementation includes several critical improvement
 
 ### 📊 Flexibility & Accuracy
 
-**True Multi-Timeframe Capability:**
-- View indicator on ANY chart timeframe
-- Calculations always use configured timeframe
-- Perfect for Weinstein's weekly analysis on daily charts
-- User-configurable timeframe input
+**Timeframe Sampling Limitation:**
+- Prices use the configured timeframe, but the SMA still runs on chart bars
+- Keep chart and selected timeframes identical for correct SMA sampling
+- The old multi-timeframe claims do not apply to the unchanged implementation
 
 ### 📝 Better Documentation
 - Comprehensive inline comments
@@ -254,25 +334,17 @@ Track sector rotation:
 ## 🔬 Technical Notes
 
 ### Repainting Prevention
-The indicator uses `lookahead=barmerge.lookahead_off` on both `request.security()` calls to ensure that higher timeframe data doesn't repaint. This means historical signals remain stable and accurate for backtesting.
+The legacy indicator uses `lookahead=barmerge.lookahead_off` on both `request.security()` calls to avoid future leakage on historical bars. This alone does not prevent higher-timeframe values from repainting while their bars are open.
 
 ### Multi-Timeframe Architecture
-**Key Feature:** Both the stock and benchmark data are fetched at the **same configured timeframe**, ensuring accurate relative strength calculations.
+Both stock and benchmark prices are fetched at the same configured timeframe. However, the SMA runs afterward on chart bars, so the selected timeframe must match the chart timeframe for correct sampling.
 
 ```pinescript
 benchmarkClose = request.security(sym, resolution, close, lookahead=barmerge.lookahead_off)
 stockClose = request.security(syminfo.tickerid, resolution, close, lookahead=barmerge.lookahead_off)
 ```
 
-This means:
-- 📊 **Chart timeframe**: Independent - use any timeframe you prefer for viewing
-- 📈 **Indicator timeframe**: Controlled by the `Timeframe` setting
-- ✅ **Both symbols**: Always compared at the same resolution
-
-**Example:** View a 4-hour chart with `Timeframe = W` setting:
-- Your chart shows 4-hour candles (for detailed price action)
-- The indicator calculates using weekly data for both stock and S&P 500
-- Perfect for day trading with weekly stage context!
+For a true weekly calculation in the legacy pane, use a 1W chart with `Timeframe = W` and `MA Length = 52`. For weekly crossover markers on price, use the standalone overlay instead.
 
 ### Stage Smoothing Algorithm
 The stage detection uses `ta.rising()` and `ta.falling()` with a configurable lookback:

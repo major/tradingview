@@ -1,0 +1,73 @@
+// Copyright 2026 Major Hayden
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//@version=6
+indicator('Mansfield RS Weekly Crossovers', shorttitle = 'MRS Cross', overlay = true, precision = 2)
+
+benchmark = input.symbol('SP:SPX', 'Benchmark', tooltip = 'Price-relative comparison. Use a benchmark with weekly sessions aligned to the chart symbol, such as SPX for US stocks.')
+resetMagnitude = input.float(1.0, 'Reset Distance Below Zero', minval = 0.0, step = 0.1, tooltip = 'Mansfield RS points below zero required to allow another signal. At 1.0, RS must close strictly below -1.0 after a signal. Larger values suppress more repeat crossings.')
+cooldownWeeks = input.int(2, 'Cooldown Weeks', minval = 0, tooltip = 'After a signal, suppress new signals for the next N weekly bars. A fresh eligible crossover is required afterward. 0 disables the cooldown but keeps the reset-depth rule.')
+showMarkers = input.bool(true, 'Show Markers', group = 'Display', inline = 'markers', tooltip = 'Show or hide crossover markers and their text. This does not change signal calculations or alerts.')
+markerColor = input.color(color.lime, 'Marker Color', group = 'Display', inline = 'markers')
+showRSText = input.bool(true, 'Show RS Text', group = 'Display', inline = 'text')
+rsTextColor = input.color(color.lime, 'Text Color', group = 'Display', inline = 'text')
+
+// A weekly chart keeps the ratio and its SMA in the same 52-week context.
+// Synthetic candles and other intervals would change the intended calculation.
+if not chart.is_standard or not timeframe.isweekly or timeframe.multiplier != 1
+    runtime.error('Use a standard 1W chart for Mansfield RS Weekly Crossovers.')
+
+// Enforce regular-session, split-adjusted prices on both legs, independent of
+// the chart's dividend-adjustment setting. This is not a total-return measure.
+stockTicker = ticker.modify(ticker.standard(syminfo.tickerid), session = session.regular, adjustment = adjustment.splits)
+benchmarkTicker = ticker.modify(benchmark, session = session.regular, adjustment = adjustment.splits)
+stockClose = request.security(stockTicker, timeframe.period, close, gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+benchmarkClose = request.security(benchmarkTicker, timeframe.period, close, gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+
+// Mansfield RS = 100 * (ratio / SMA(ratio, 52) - 1).
+// Multiplying the raw ratio by 100 is optional: it cancels in normalization.
+relativePerformance = not na(stockClose) and stockClose > 0 and not na(benchmarkClose) and benchmarkClose > 0 ? stockClose / benchmarkClose : na
+rpMovingAverage = ta.sma(relativePerformance, 52)
+mansfieldRS = not na(rpMovingAverage) and rpMovingAverage > 0 ? 100.0 * (relativePerformance / rpMovingAverage - 1.0) : na
+
+// Start eligible, but require two valid RS observations for a real crossing.
+// Do not replace missing RS with zero: that would invent startup signals.
+var bool armed = true
+var int lastSignalBar = na
+crossedAbove = ta.crossover(mansfieldRS, 0.0)
+hasValidRS = not na(mansfieldRS) and not na(mansfieldRS[1])
+validCross = hasValidRS and crossedAbove
+// Count from accepted signals only. Block the next N bars, not the first signal.
+cooldownReady = na(lastSignalBar) or bar_index - lastSignalBar > cooldownWeeks
+signal = barstate.isconfirmed and armed and cooldownReady and validCross
+
+// Commit eligibility changes only at the weekly close. Shallow negative dips
+// after a signal do not rearm, and touching the reset level is not sufficient.
+if barstate.isconfirmed
+    if signal
+        armed := false
+        lastSignalBar := bar_index
+    else if not na(mansfieldRS) and mansfieldRS < -resetMagnitude
+        armed := true
+
+// Inputs own all display controls to avoid duplicate color pickers in Style.
+// A missing text color hides the constant RS text without hiding its triangle.
+plotshape(signal and showMarkers, title = 'Mansfield RS Zero Cross', style = shape.triangleup, location = location.belowbar, color = markerColor, size = size.tiny, text = 'RS', textcolor = showRSText ? rsTextColor : na, editable = false)
+
+// Keep diagnostic values available without visible or editable chart lines.
+// Explicitly hide their colors as well as limiting their display location.
+plot(barstate.isconfirmed ? mansfieldRS : na, title = 'Mansfield RS', color = na, editable = false, display = display.data_window, precision = 4)
+plot(barstate.isconfirmed and hasValidRS ? (armed and cooldownReady ? 1 : 0) : na, title = 'Ready for Next Crossover', color = na, editable = false, display = display.data_window, precision = 0)
+
+alertcondition(signal, title = 'Mansfield RS Weekly Zero Cross', message = '{{ticker}}: confirmed weekly Mansfield RS crossed above zero after eligibility/reset. RS = {{plot("Mansfield RS")}}.')
