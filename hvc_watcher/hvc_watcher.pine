@@ -85,14 +85,25 @@ selected_shape = getShape(shape_style)
 plotshape(series = show_hve, location = location.abovebar, style = selected_shape, size = size.tiny, color = color_hve, title = 'HVE (Highest Volume Ever)')
 plotshape(series = show_hvc, location = location.abovebar, style = selected_shape, size = size.tiny, color = color_hvc, title = 'HVC (High Volume Close)')
 
-// Volume multiplier labels
+// Allocate on historical execution so realtime rollback does not recreate the live label.
+var label current_label = na
+if show_current_multiplier and barstate.isfirst
+    current_label := label.new(na, na, '', color = current_label_color,
+         textcolor = current_text_color, style = label.style_label_upper_left, size = size.normal)
+var array<label> multiplier_labels = array.new<label>()
+
+// Reserve one slot for the live label and prune before allocation to avoid GC eviction.
 if show_multiplier_labels and is_hvc and volume_sma > 0
+    label_limit = show_current_multiplier ? 499 : 500
+    if array.size(multiplier_labels) >= label_limit
+        label.delete(array.shift(multiplier_labels))
     label_text = getMultiplierText(volume_multiplier)
-    label.new(bar_index, close, label_text,
+    multiplier_label = label.new(bar_index, close, label_text,
               color = multiplier_label_color,
               textcolor = multiplier_text_color,
               style = label.style_label_right,
               size = size.normal)
+    array.push(multiplier_labels, multiplier_label)
 
 // HVC zones
 if show_zones and is_hvc
@@ -105,15 +116,9 @@ if show_zones and is_hvc
     linefill.new(topLine, bottomLine, color = fillColor)
 
 // Current bar multiplier
-if show_current_multiplier and barstate.islast and volume_sma > 0
-    current_mult_text = getMultiplierText(volume_multiplier)
-    var label current_label = na
-    label.delete(current_label)
-    current_label := label.new(bar_index, low, current_mult_text,
-                              color = current_label_color,
-                              textcolor = current_text_color,
-                              style = label.style_label_upper_left,
-                              size = size.normal)
+if show_current_multiplier and barstate.islast
+    label.set_xy(current_label, bar_index, low)
+    label.set_text(current_label, getMultiplierText(volume_multiplier))
 
 // ═══════════════════════════════════════════════════════════════
 // ALERTS

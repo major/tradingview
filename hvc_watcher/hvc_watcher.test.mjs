@@ -16,7 +16,7 @@ function replaceInput(source, name, value) {
 }
 
 /** Run the complete indicator with synthetic daily volume and explicit input overrides. */
-async function runIndicator(volumes, inputs = {}) {
+async function runIndicator(volumes, inputs = {}, { rawContext = false } = {}) {
     let source = await readFile(sourcePath, 'utf8');
     for (const [name, value] of Object.entries({ sma_length: 3, hvc_threshold: 2.0, ...inputs })) {
         source = replaceInput(source, name, value);
@@ -28,6 +28,9 @@ async function runIndicator(volumes, inputs = {}) {
         closeTime: Date.UTC(2020, 0, 2) + index * 86400000 - 1,
     }));
     const context = await new PineTS(bars, 'TEST', 'D').run(source);
+    if (rawContext) {
+        return context;
+    }
     return Object.fromEntries(Object.entries(context.plots).map(([name, plot]) => [name, plot.data.map(point => point.value)]));
 }
 
@@ -151,3 +154,49 @@ test('source wires bounded zones, shared formatting, and hidden diagnostics', as
     }
     assert.match(source, /title = 'Volume Multiplier'[^\n]*precision = 1/);
 });
+
+test('one live label is allocated before the last bar and displays a fractional multiplier', async () => {
+    // Arrange / Act
+    const context = await runIndicator([10, 10, 50], { show_current_multiplier: true }, { rawContext: true });
+
+    // Assert: creation timing is observable here, but realtime rollback still needs TradingView.
+    const [label] = context.pine.label.all;
+    assert.equal(context.pine.label.all.length, 1);
+    assert.equal(label._createdAtBar, 0);
+    assert.equal(label.x, 2);
+    assert.equal(label.y, 99);
+    assert.equal(label.text, '2.1x');
+});
+
+test('the live label shows N/A instead of a stale or absent multiplier', async () => {
+    // Arrange / Act
+    const context = await runIndicator([0, 0, 0], { show_current_multiplier: true }, { rawContext: true });
+
+    // Assert
+    assert.equal(context.pine.label.all.length, 1);
+    const [label] = context.pine.label.all;
+    assert.equal(label.text, 'N/A');
+});
+
+for (const showLive of [false, true]) {
+    test(`historical labels stay within capacity with live label ${showLive}`, async () => {
+        // Arrange: length-one, threshold-one volume makes every bar an HVC.
+        const inputs = { sma_length: 1, hvc_threshold: 1.0, show_zones: false, show_multiplier_labels: true, show_current_multiplier: showLive };
+
+        // Act
+        const context = await runIndicator(Array(502).fill(10), inputs, { rawContext: true });
+
+        // Assert: deterministic retention must not let GC evict the persistent live label.
+        const labels = Array.from(context.pine.label.all);
+        const historical = labels.filter(label => label.style === context.pine.label.style_label_right);
+        assert.equal(labels.length, 500);
+        assert.equal(historical.length, showLive ? 499 : 500);
+        assert.equal(Math.min(...historical.map(label => label.x)), showLive ? 3 : 2);
+        assert.ok(historical.every(label => label.text === '1.0x'));
+        if (showLive) {
+            const live = labels.find(label => label.style === context.pine.label.style_label_upper_left);
+            assert.equal(live._createdAtBar, 0);
+            assert.equal(live.x, 501);
+        }
+    });
+}

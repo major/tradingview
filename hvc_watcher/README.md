@@ -14,6 +14,7 @@ Watch for High Volume Closes (HVC) and unusual volume patterns.
 
 * Optional HVC zones mark the high and low of each HVC bar. Fixed zones default to 90 bars and have a maximum length of 500 bars; zones can instead extend right.
 * Optional historical HVC and current-bar labels show multipliers rounded to one decimal place. Shape, color, zone transparency, and labels are configurable.
+* The current-bar label is reused rather than recreated on each update, and shows N/A when its multiplier is unavailable. Historical labels retain the most recent 500 signals, or 499 when the current-bar label is enabled to reserve its drawing slot. Zones continue to use TradingView's drawing garbage collection.
 * The Data Window shows Volume, Volume SMA, HVE Threshold, Volume Multiplier, HVC Comparison Threshold, HVC Signal, and HVE Signal. Signals are numeric 1 or 0. The comparison threshold is the current SMA multiplied by the HVC setting, in volume units. Since the SMA includes the current bar, it is not a fixed volume target.
 * HVE, HVC, and combined alerts are available. On an incomplete bar, volume, the SMA, signals, labels, and alerts can change intrabar. TradingView alert frequency settings also affect delivery.
 * TradingView alerts use a snapshot of the script and settings. Delete and recreate alerts after editing the script or changing settings you want reflected in the alert.
