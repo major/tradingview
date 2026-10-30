@@ -10,7 +10,7 @@ Tracks IBD-style Power Trend start, Almost Power Trend watchlist, and stop condi
 
 ### 👀 [HVC Watcher](hvc_watcher/)
 
-Watches for High Volume Close patterns and tracks unusual volume activity with optional time filtering in NYC timezone. This enhanced version of the HVC Finder provides more flexible monitoring capabilities and time-based filtering for intraday analysis.
+Watches for High Volume Close patterns and loaded-history volume records, with optional zones, labels, and alerts.
 
 ### 🔮 [Relative Strength Leadership](relative_strength_leadership/)
 
