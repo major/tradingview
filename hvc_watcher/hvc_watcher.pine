@@ -32,7 +32,7 @@ shape_style = input.string('circles', title = 'Shape Style', options = ['circles
 // Zone settings
 show_zones = input.bool(true, title = 'Show HVC Zones', group = 'Zones', tooltip = 'Draw horizontal zones marking the high/low range of HVC bars')
 zone_extend_right = input.bool(false, title = 'Extend Zones Right', group = 'Zones', tooltip = 'Extend zones to the right edge of the chart (useful for support/resistance). When disabled, zones have a fixed length.')
-zone_length = input.int(90, title = 'Zone Length (bars)', minval = 1, group = 'Zones', tooltip = 'Number of bars to extend zones when "Extend Zones Right" is disabled')
+zone_length = input.int(90, title = 'Zone Length (bars)', minval = 1, maxval = 500, group = 'Zones', tooltip = 'Number of bars to extend zones when "Extend Zones Right" is disabled')
 zone_color = input.color(color.blue, title = 'Zone Color', group = 'Zones')
 zone_transparency = input.int(95, title = 'Zone Fill Transparency (%)', minval = 0, maxval = 100, group = 'Zones')
 zone_edge_transparency = input.int(80, title = 'Zone Edge Transparency (%)', minval = 0, maxval = 100, group = 'Zones')
@@ -50,19 +50,19 @@ current_text_color = input.color(color.white, title = 'Current Bar Label Text', 
 // ═══════════════════════════════════════════════════════════════
 
 volume_sma = ta.sma(volume, sma_length)
-volume_multiplier = volume_sma > 0 ? volume / volume_sma : 0
+volume_multiplier = not na(volume) and not na(volume_sma) and volume_sma > 0 ? volume / volume_sma : na
 
 // Detection flags
 var float hve_threshold = 0
 hve_threshold := math.max(hve_threshold, nz(volume[1], 0))
 is_hve = volume > hve_threshold and volume > 0
-is_hvc = volume >= volume_sma * hvc_threshold
+is_hvc = not na(volume) and volume > 0 and not na(volume_sma) and volume_sma > 0 and volume >= volume_sma * hvc_threshold
 
 // Determine which markers to show (HVE takes priority over HVC to avoid overlap)
 show_hve = show_hve_markers and is_hve
 show_hvc = is_hvc and not show_hve
 
-// Map shape style string to plotshape constant
+//@function Map a shape style string to its plotshape constant.
 getShape(style) =>
     switch style
         'circles' => shape.circle
@@ -71,6 +71,10 @@ getShape(style) =>
         'cross' => shape.cross
         'xcross' => shape.xcross
         => shape.circle
+
+//@function Format a multiplier to one decimal place, or show N/A when unavailable.
+getMultiplierText(value) =>
+    na(value) ? 'N/A' : str.tostring(value, '0.0') + 'x'
 
 selected_shape = getShape(shape_style)
 
@@ -83,8 +87,7 @@ plotshape(series = show_hvc, location = location.abovebar, style = selected_shap
 
 // Volume multiplier labels
 if show_multiplier_labels and is_hvc and volume_sma > 0
-    multiplier_rounded = math.round(volume_multiplier)
-    label_text = str.tostring(multiplier_rounded) + "x"
+    label_text = getMultiplierText(volume_multiplier)
     label.new(bar_index, close, label_text,
               color = multiplier_label_color,
               textcolor = multiplier_text_color,
@@ -103,7 +106,7 @@ if show_zones and is_hvc
 
 // Current bar multiplier
 if show_current_multiplier and barstate.islast and volume_sma > 0
-    current_mult_text = str.tostring(math.round(volume_multiplier)) + "x"
+    current_mult_text = getMultiplierText(volume_multiplier)
     var label current_label = na
     label.delete(current_label)
     current_label := label.new(bar_index, low, current_mult_text,
@@ -121,6 +124,10 @@ alertcondition(is_hvc, title = 'HVC', message = 'High Volume Close detected on {
 alertcondition(is_hve or is_hvc, title = 'HVE or HVC', message = 'HVE or HVC detected on {{ticker}}')
 
 // Display current values in data window
-plot(volume, title = 'Volume', display = display.data_window)
-plot(volume_sma, title = 'Volume SMA', display = display.data_window)
-plot(hve_threshold, title = 'HVE Threshold', display = display.data_window)
+plot(volume, title = 'Volume', color = na, editable = false, display = display.data_window)
+plot(volume_sma, title = 'Volume SMA', color = na, editable = false, display = display.data_window)
+plot(hve_threshold, title = 'HVE Threshold', color = na, editable = false, display = display.data_window)
+plot(volume_multiplier, title = 'Volume Multiplier', color = na, editable = false, display = display.data_window, precision = 1)
+plot(volume_sma * hvc_threshold, title = 'HVC Comparison Threshold', color = na, editable = false, display = display.data_window)
+plot(is_hvc ? 1 : 0, title = 'HVC Signal', color = na, editable = false, display = display.data_window)
+plot(is_hve ? 1 : 0, title = 'HVE Signal', color = na, editable = false, display = display.data_window)

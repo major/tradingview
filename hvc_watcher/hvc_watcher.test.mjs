@@ -87,3 +87,67 @@ test('alert conditions use detection flags, not marker visibility', async () => 
     assert.match(source, /alertcondition\(is_hvc, title = 'HVC'/);
     assert.match(source, /alertcondition\(is_hve or is_hvc, title = 'HVE or HVC'/);
 });
+
+test('zero volume suppresses signals and an unavailable baseline has no multiplier', async () => {
+    // Arrange / Act
+    const plots = await runIndicator([0, 0, 0, 0]);
+
+    // Assert
+    assert.deepEqual(plots['Test HVC'], [0, 0, 0, 0]);
+    assert.deepEqual(plots['Test HVE'], [0, 0, 0, 0]);
+    assert.ok(plots['Test multiplier'].every(value => value == null || Number.isNaN(value)));
+});
+
+test('zero current volume with a positive baseline has a zero multiplier', async () => {
+    // Arrange / Act
+    const plots = await runIndicator([10, 10, 0]);
+
+    // Assert
+    assert.equal(plots['Test multiplier'][2], 0);
+    assert.equal(plots['Test HVC'][2], 0);
+});
+
+test('warmup and missing current volume do not produce HVC signals', async () => {
+    // Arrange / Act
+    const plots = await runIndicator([10, 10, NaN]);
+
+    // Assert
+    assert.deepEqual(plots['Test HVC'], [0, 0, 0]);
+    assert.ok(plots['Test multiplier'].every(value => value == null || Number.isNaN(value)));
+});
+
+test('missing current volume is excluded even after the SMA warms up', async () => {
+    // Arrange / Act
+    const plots = await runIndicator([10, 10, 10, NaN]);
+
+    // Assert
+    assert.equal(plots['Test HVC'][3], 0);
+    assert.ok(plots['Test multiplier'][3] == null || Number.isNaN(plots['Test multiplier'][3]));
+});
+
+test('Data Window diagnostics expose the calculated values', async () => {
+    // Arrange / Act
+    const plots = await runIndicator([10, 10, 40]);
+
+    // Assert
+    assert.deepEqual(plots['Volume Multiplier'].slice(2), [2]);
+    assert.deepEqual(plots['HVC Comparison Threshold'].slice(2), [40]);
+    assert.deepEqual(plots['HVC Signal'], [0, 0, 1]);
+    assert.deepEqual(plots['HVE Signal'], [1, 0, 1]);
+});
+
+test('source wires bounded zones, shared formatting, and hidden diagnostics', async () => {
+    // Arrange
+    const source = await readFile(sourcePath, 'utf8');
+
+    // Act / Assert
+    assert.match(source, /zone_length = input\.int\(90,.*maxval = 500/);
+    assert.match(source, /\/\/@function[^\n]*\ngetMultiplierText\(value\) =>/);
+    assert.match(source, /str\.tostring\(value, '0\.0'\) \+ 'x'/);
+    assert.match(source, /na\(value\) \? 'N\/A'/);
+    assert.equal((source.match(/getMultiplierText\(volume_multiplier\)/g) || []).length, 2);
+    for (const title of ['Volume', 'Volume SMA', 'HVE Threshold', 'Volume Multiplier', 'HVC Comparison Threshold', 'HVC Signal', 'HVE Signal']) {
+        assert.match(source, new RegExp(`plot\\([^\\n]*title = '${title}'[^\\n]*color = na[^\\n]*editable = false[^\\n]*display = display\\.data_window`));
+    }
+    assert.match(source, /title = 'Volume Multiplier'[^\n]*precision = 1/);
+});

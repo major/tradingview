@@ -2,44 +2,28 @@
 
 Watch for High Volume Closes (HVC) and unusual volume patterns.
 
-## Features
+## Signals and volume context
 
-### Volume Pattern Detection
-* **High Volume Close (HVC)** 🟠 markers when volume exceeds a configurable multiple of the SMA (default: 3.0x)
-* **Highest Volume Ever (HVE)** 🟢 markers for all-time high volume bars (disabled by default)
-* HVE takes priority over HVC to avoid overlapping markers. When HVE display is disabled, bars that are both HVC and HVE still display as HVC.
+* **HVC** 🟠 means positive volume is at least the configured multiple of a positive volume SMA (default: 3.0x over 20 bars). The SMA includes the current bar, so a length of 1 cannot produce a multiplier above 1.
+* **HVE** 🟢 means positive volume exceeds every earlier volume in the loaded chart history. Record ties do not qualify. This is not necessarily an all-time record. HVE markers are off by default.
+* HVE markers take priority when both signals occur. Turning HVE markers off still allows the HVC marker. Alerts use the signals, not marker visibility.
+* Missing volume or an unavailable or nonpositive SMA cannot produce HVC. Zero volume produces neither signal. A zero current volume with a positive SMA has a 0.0x multiplier; an unavailable multiplier is N/A.
+* Volume units depend on the symbol and feed. Some feeds report tick volume rather than traded volume. Mixed sessions and differences in time of day can affect the comparison.
 
-### HVC Zones
-* Horizontal zones marking the high/low range of HVC bars for support/resistance
-* Fixed length (default: 90 bars) or extend to the right edge of the chart
-* Configurable zone color and transparency for both fill and edges
+## Display and alerts
 
-### Volume Multiplier Labels
-* Optional labels showing the exact volume multiplier (e.g., "5x") next to HVC bars
-* Optional real-time multiplier for the current (incomplete) bar
+* Optional HVC zones mark the high and low of each HVC bar. Fixed zones default to 90 bars and have a maximum length of 500 bars; zones can instead extend right.
+* Optional historical HVC and current-bar labels show multipliers rounded to one decimal place. Shape, color, zone transparency, and labels are configurable.
+* The Data Window shows Volume, Volume SMA, HVE Threshold, Volume Multiplier, HVC Comparison Threshold, HVC Signal, and HVE Signal. Signals are numeric 1 or 0. The comparison threshold is the current SMA multiplied by the HVC setting, in volume units. Since the SMA includes the current bar, it is not a fixed volume target.
+* HVE, HVC, and combined alerts are available. On an incomplete bar, volume, the SMA, signals, labels, and alerts can change intrabar. TradingView alert frequency settings also affect delivery.
+* TradingView alerts use a snapshot of the script and settings. Delete and recreate alerts after editing the script or changing settings you want reflected in the alert.
 
-### Customization Options
-* **SMA Length** - Moving average period (default: 20)
-* **HVC Multiplier Threshold** - Volume must be at least this many times the SMA (default: 3.0x)
-* **Show HVE Markers** - Toggle Highest Volume Ever markers (default: off)
-* **Shape Styles** - Choose from circles, triangles, diamonds, crosses, or X-crosses
-* **Zone Settings** - Toggle zones, extend right, fixed length, color, and transparency
-* **Multiplier Labels** - Toggle HVC and current bar multiplier labels with custom colors
+## Tests and TradingView checks
 
-### Alert Support 🔔
-* Highest Volume Ever (HVE) alert
-* High Volume Close (HVC) alert
-* Combined HVE or HVC alert
+Run the tiny offline fixtures with the existing cached PineTS 0.13.1 installation:
 
-### Data Window
-Volume, Volume SMA, and HVE Threshold are available in TradingView's data window for inspection.
+```sh
+NODE_PATH=/home/major/.cache/opencode-tmp/opencode/mansfield-pinets/node_modules node --test hvc_watcher/hvc_watcher.test.mjs
+```
 
-## How to Use
-
-1. **Watch for markers**: Orange circles above bars indicate High Volume Closes
-2. **Enable HVE** (optional): Turn on Highest Volume Ever markers to spot all-time volume records
-3. **Use zones**: HVC zones highlight price ranges where high volume occurred, useful as support/resistance
-4. **Adjust thresholds**: Tune the SMA length and multiplier threshold to match your trading style
-5. **Set alerts**: Configure TradingView alerts for HVC, HVE, or both
-
-All settings are fully configurable. Enjoy! 🤓
+PineTS is a compatibility runtime, not TradingView's compiler or realtime engine. Its SMA handling of missing values can differ from Pine's valid-sample semantics, so the fixtures do not establish behavior after missing samples. Source-wiring checks do not compile Pine or verify rendering or alerts. Manually compile in TradingView, check historical and replay behavior, and test live alerts before relying on the indicator.
