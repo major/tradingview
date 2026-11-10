@@ -8,9 +8,9 @@ import test from 'node:test';
 const { PineTS } = createRequire(import.meta.url)('pinets');
 const sourcePath = new URL('./hvc_watcher.pine', import.meta.url);
 
-/** Replace one input declaration and fail loudly if the source boundary changes. */
+/** Replace one input with a Pine expression and fail if the declaration changes. */
 function replaceInput(source, name, value) {
-    const pattern = new RegExp(`^${name} = input\\.(?:int|float|bool)\\(.*\\)$`, 'gm');
+    const pattern = new RegExp(`^${name} = input\\.(?:int|float|bool|color)\\(.*\\)$`, 'gm');
     assert.equal([...source.matchAll(pattern)].length, 1, name);
     return source.replace(pattern, `${name} = ${value}`);
 }
@@ -312,6 +312,18 @@ test('dependent controls and alert context are wired without changing alert titl
     }
     assert.ok(alerts.slice(0, 3).every(alert => alert.includes('{{plot("Volume Multiplier")}}')));
     assert.match(alerts[3], /alertcondition\(ray_touched, title = 'Event Ray Touch'/);
+});
+
+test('marker color inputs preserve their selected opacity', async () => {
+    // Arrange: separate HVE and HVC events expose both marker color inputs.
+    const inputs = { show_hve_markers: true, color_hve: 'color.new(color.blue, 50)', color_hvc: 'color.new(color.red, 25)' };
+
+    // Act
+    const context = await runIndicator([100, 10, 10, 40], inputs, { rawContext: true });
+
+    // Assert: Pine color inputs include their alpha channel, not just the RGB value.
+    assert.equal(context.plots['HVE (Highest Volume Ever)'].data[0].options.color, '#2962FF80');
+    assert.equal(context.plots['HVC (High Volume Close)'].data[3].options.color, '#F23645BF');
 });
 
 for (const { volumes, anchors, colors } of [
