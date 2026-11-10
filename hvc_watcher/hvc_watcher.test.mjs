@@ -15,8 +15,8 @@ function replaceInput(source, name, value) {
     return source.replace(pattern, `${name} = ${value}`);
 }
 
-/** Run synthetic chart volume with explicit overrides; null preserves an input's default. */
-async function runIndicator(volumes, inputs = {}, { rawContext = false, unconfirmed = [], timeframe = 'D' } = {}) {
+/** Run synthetic volume and optional OHLC overrides; null preserves an input's default. */
+async function runIndicator(volumes, inputs = {}, { rawContext = false, unconfirmed = [], timeframe = 'D', prices = [] } = {}) {
     let source = await readFile(sourcePath, 'utf8');
     for (const [name, value] of Object.entries({ sma_length: 3, hvc_threshold: 2.0, ...inputs })) {
         if (value !== null) {
@@ -29,7 +29,7 @@ async function runIndicator(volumes, inputs = {}, { rawContext = false, unconfir
     }
     source += '\nplot(is_hvc ? 1 : 0, title = "Test HVC")\nplot(is_hve ? 1 : 0, title = "Test HVE")\nplot(volume_multiplier, title = "Test multiplier")\n';
     const bars = volumes.map((volume, index) => ({
-        open: 100, high: 102, low: 99, close: 101, volume,
+        open: 100, high: 102, low: 99, close: 101, ...prices[index], volume,
         openTime: Date.UTC(2020, 0, 1) + index * 86400000,
         closeTime: Date.UTC(2020, 0, 2) + index * 86400000 - 1,
     }));
@@ -117,6 +117,22 @@ for (const showHve of [false, true]) {
         assert.deepEqual(plots['HVE (Highest Volume Ever)'].map(Boolean), [showHve, false, showHve]);
     });
 }
+
+test('event eligibility depends on volume rather than candle prices', async () => {
+    // Arrange: distinct closes will also identify each event's drawing anchor.
+    const prices = [
+        { open: 8, high: 11, low: 7, close: 10 },
+        { open: 18, high: 22, low: 17, close: 20 },
+        { open: 28, high: 33, low: 27, close: 30 },
+    ];
+
+    // Act
+    const plots = await runIndicator([40, 10, 100], {}, { prices });
+
+    // Assert: the last event is both HVC and HVE, despite unrelated prices.
+    assert.deepEqual(plots['HVC Signal'], [0, 0, 1]);
+    assert.deepEqual(plots['HVE Signal'], [1, 0, 1]);
+});
 
 test('alert conditions use detection flags, not marker visibility', async () => {
     // Arrange
