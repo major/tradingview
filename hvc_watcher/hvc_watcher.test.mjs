@@ -359,6 +359,24 @@ for (const showRays of [false, true]) {
 }
 
 for (const showRays of [false, true]) {
+    test(`touch scanning handles later, first, and multiple matching levels with visibility ${showRays}`, async () => {
+        // Arrange: two saved levels at 10 and 20, followed by three distinct touch ranges.
+        const prices = [
+            { open: 10, high: 11, low: 9, close: 10 },
+            { open: 20, high: 21, low: 19, close: 20 },
+            { open: 20, high: 21, low: 19, close: 20 },
+            { open: 10, high: 11, low: 9, close: 10 },
+            { open: 10, high: 21, low: 9, close: 20 },
+        ];
+
+        // Act
+        const context = await runIndicator([100, 200, 0, 0, 0], { show_rays: showRays }, { prices, rawContext: true });
+
+        // Assert: nonmatches do not stop scanning, and any match leaves retention unchanged.
+        assert.deepEqual(context.plots['Test Ray Touch'].data.map(point => point.value), [0, 0, 1, 1, 1]);
+        assert.deepEqual(Array.from(context.pine.line.all, ray => ray.y1), [10, 20]);
+    });
+
     test(`unconfirmed events cannot replace saved levels at capacity with visibility ${showRays}`, async () => {
         // Arrange: an unfinished event at 20 must not replace the saved ray at 10.
         const prices = [
