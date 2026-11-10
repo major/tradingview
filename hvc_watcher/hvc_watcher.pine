@@ -25,9 +25,6 @@ hvc_threshold = input.float(3.0, title = 'HVC Multiplier: Daily and Below', minv
 hvc_threshold_weekly = input.float(2.0, title = 'HVC Multiplier: Weekly', minval = 1.0, step = 0.1, group = 'Volume Settings', tooltip = 'Minimum multiple of the current-inclusive volume SMA for HVC on weekly charts, including multi-week charts such as 2W.')
 hvc_threshold_monthly = input.float(2.0, title = 'HVC Multiplier: Monthly and Above', minval = 1.0, step = 0.1, group = 'Volume Settings', tooltip = 'Minimum multiple of the current-inclusive volume SMA for HVC on monthly charts, including quarterly and yearly charts.')
 
-// Signal timing is independent of display settings and the running HVE record.
-confirm_on_close = input.bool(false, title = 'Confirm Signals at Bar Close', group = 'Signal Timing', tooltip = 'Wait for the bar to close before showing signals, signal labels, rays, or event and ray-touch alert eligibility. The current-bar multiplier remains live. Disabled preserves intrabar signals.')
-
 // Each event uses one line. Keep the retention cap within indicator max_lines_count.
 show_rays = input.bool(false, title = 'Show Event Rays', group = 'Rays', tooltip = 'Show horizontal rays at each HVC or HVE close. HVE takes priority when both occur, regardless of marker visibility. Hidden rays are still retained and monitored for touch alerts.')
 ray_limit = input.int(10, title = 'Maximum Event Rays', minval = 1, maxval = 200, group = 'Rays', tooltip = 'Keep and monitor this many recent events, even when rays are hidden. Older rays are deleted. A new event candle can still alert on a ray it replaces.')
@@ -42,7 +39,7 @@ shape_style = input.string('circles', title = 'Shape Style', options = ['circles
 show_multiplier_labels = input.bool(false, title = 'Show Volume Multiplier Labels', group = 'Labels', tooltip = 'Display the rounded volume multiplier (e.g., 3.4x) next to HVC bars')
 multiplier_label_color = input.color(color.orange, title = 'Multiplier Label Background', group = 'Labels', inline = 'hvc_label_colors', active = show_multiplier_labels)
 multiplier_text_color = input.color(color.black, title = 'Multiplier Label Text', group = 'Labels', inline = 'hvc_label_colors', active = show_multiplier_labels)
-show_current_multiplier = input.bool(false, title = 'Show Current Bar Multiplier', group = 'Labels', tooltip = 'Live volume divided by the current-inclusive SMA, not projected closing volume. Shows N/A without a valid baseline, even in confirmed-only mode.')
+show_current_multiplier = input.bool(false, title = 'Show Current Bar Multiplier', group = 'Labels', tooltip = 'Live volume divided by the current-inclusive SMA, not projected closing volume. Updates before bar close and shows N/A without a valid baseline.')
 current_label_color = input.color(color.new(color.blue, 50), title = 'Current Bar Label Background', group = 'Labels', inline = 'current_label_colors', active = show_current_multiplier)
 current_text_color = input.color(color.white, title = 'Current Bar Label Text', group = 'Labels', inline = 'current_label_colors', active = show_current_multiplier)
 
@@ -61,10 +58,9 @@ hve_threshold := math.max(hve_threshold, nz(volume[1], 0))
 is_hve_raw = volume > hve_threshold and volume > 0
 is_hvc_raw = not na(volume) and volume > 0 and not na(volume_sma) and volume_sma > 0 and volume >= volume_sma * active_hvc_threshold
 
-// Gate emitted signals, not the baseline state. Display toggles never change eligibility.
-signals_ready = not confirm_on_close or barstate.isconfirmed
-is_hve = is_hve_raw and signals_ready
-is_hvc = is_hvc_raw and signals_ready
+// Confirm events at close without gating the running record or live diagnostics.
+is_hve = is_hve_raw and barstate.isconfirmed
+is_hvc = is_hvc_raw and barstate.isconfirmed
 
 // Determine which markers to show (HVE takes priority over HVC to avoid overlap)
 show_hve = show_hve_markers and is_hve
@@ -113,14 +109,13 @@ if show_multiplier_labels and is_hvc and volume_sma > 0
               size = size.normal)
     array.push(multiplier_labels, multiplier_label)
 
-// Check older rays before adding this candle's ray, so an event cannot touch itself.
+// Check older rays live, before adding this candle's confirmed ray to exclude self-touches.
 var array<line> event_rays = array.new<line>()
 ray_touched = false
-if signals_ready
-    for event_ray in event_rays
-        ray_price = line.get_y1(event_ray)
-        if bar_index > line.get_x1(event_ray) and low <= ray_price and high >= ray_price
-            ray_touched := true
+for event_ray in event_rays
+    ray_price = line.get_y1(event_ray)
+    if bar_index > line.get_x1(event_ray) and low <= ray_price and high >= ray_price
+        ray_touched := true
 
 // Hidden rays still store alert levels. Explicit deletion bounds both modes without drawing GC.
 if is_hvc or is_hve

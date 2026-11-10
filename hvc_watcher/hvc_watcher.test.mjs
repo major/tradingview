@@ -257,36 +257,34 @@ for (const showLive of [false, true]) {
     });
 }
 
-for (const confirmOnClose of [false, true]) {
-    for (const showHve of [false, true]) {
-        test(`unconfirmed outputs share timing (${confirmOnClose}) independent of HVE display (${showHve})`, async () => {
-            // Arrange: simulate an unfinished bar without pretending to simulate realtime rollback.
-            const inputs = { confirm_on_close: confirmOnClose, show_hve_markers: showHve, show_multiplier_labels: true, show_current_multiplier: true };
+for (const showHve of [false, true]) {
+    test(`events wait for close while diagnostics and older-ray touches stay live (HVE display ${showHve})`, async () => {
+        // Arrange: simulate an unfinished bar without pretending to simulate realtime rollback.
+        const inputs = { show_hve_markers: showHve, show_multiplier_labels: true, show_current_multiplier: true };
 
-            // Act
-            const context = await runIndicator([10, 10, 40], inputs, { unconfirmed: [2], rawContext: true });
+        // Act
+        const context = await runIndicator([10, 10, 40], inputs, { unconfirmed: [2], rawContext: true });
 
-            // Assert: historical labels, rays, public flags, and markers share the close gate.
-            const values = name => context.plots[name].data.map(point => point.value);
-            assert.deepEqual(values('HVC Signal'), [0, 0, confirmOnClose ? 0 : 1]);
-            assert.deepEqual(values('HVE Signal'), [1, 0, confirmOnClose ? 0 : 1]);
-            assert.deepEqual(values('HVC (High Volume Close)').map(Boolean), [false, false, !confirmOnClose && !showHve]);
-            assert.deepEqual(values('HVE (Highest Volume Ever)').map(Boolean), [showHve, false, !confirmOnClose && showHve]);
-            assert.equal(context.pine.line.all.length, confirmOnClose ? 1 : 2);
-            const labels = Array.from(context.pine.label.all);
-            assert.equal(labels.length, confirmOnClose ? 1 : 2);
-            assert.equal(labels.find(label => label.style === context.pine.label.style_label_upper_left).text, '2.0x');
-        });
-    }
+        // Assert: only event outputs wait for close; older levels and diagnostics remain live.
+        const values = name => context.plots[name].data.map(point => point.value);
+        assert.deepEqual(values('HVC Signal'), [0, 0, 0]);
+        assert.deepEqual(values('HVE Signal'), [1, 0, 0]);
+        assert.deepEqual(values('HVC (High Volume Close)').map(Boolean), [false, false, false]);
+        assert.deepEqual(values('HVE (Highest Volume Ever)').map(Boolean), [showHve, false, false]);
+        assert.deepEqual(values('Test Ray Touch'), [0, 1, 1]);
+        assert.equal(values('Volume Multiplier')[2], 2);
+        assert.equal(context.pine.line.all.length, 1);
+        const labels = Array.from(context.pine.label.all);
+        assert.equal(labels.length, 1);
+        assert.equal(labels[0].style, context.pine.label.style_label_upper_left);
+        assert.equal(labels[0].text, '2.0x');
+    });
 }
 
-test('confirmed mode does not change historical signals or the running HVE record', async () => {
-    // Arrange
-    const inputs = { confirm_on_close: true };
-
-    // Act
-    const historical = await runIndicator([10, 10, 40], inputs);
-    const simulated = await runIndicator([10, 10, 40, 30], inputs, { unconfirmed: [2] });
+test('event confirmation preserves historical signals and the running HVE record', async () => {
+    // Arrange / Act
+    const historical = await runIndicator([10, 10, 40]);
+    const simulated = await runIndicator([10, 10, 40, 30], {}, { unconfirmed: [2] });
 
     // Assert: suppressing an output must not suppress the record used on the following bar.
     assert.deepEqual(historical['HVC Signal'], [0, 0, 1]);
@@ -299,7 +297,7 @@ test('dependent controls and alert context are wired without changing alert titl
     const source = await readFile(sourcePath, 'utf8');
 
     // Act / Assert: TradingView must validate disabled controls and alert placeholder substitution.
-    assert.match(source, /confirm_on_close = input\.bool\(false/);
+    assert.doesNotMatch(source, /confirm_on_close|signals_ready|Signal Timing/);
     assert.match(source, /color_hve = input\.color\([^\n]*active = show_hve_markers or show_rays/);
     assert.doesNotMatch(source.match(/^ray_limit = .*$/m)[0], /active =/);
     for (const [name, toggle] of [['multiplier_label_color', 'show_multiplier_labels'], ['multiplier_text_color', 'show_multiplier_labels'], ['current_label_color', 'show_current_multiplier'], ['current_text_color', 'show_current_multiplier']]) {
@@ -340,8 +338,8 @@ for (const { volumes, anchors, colors } of [
     });
 }
 
-for (const [confirmOnClose, showRays] of [[false, false], [false, true], [true, false], [true, true]]) {
-    test(`touch boundaries and repeat touches with confirmation ${confirmOnClose}, visibility ${showRays}`, async () => {
+for (const showRays of [false, true]) {
+    test(`touch boundaries and repeat touches stay live with visibility ${showRays}`, async () => {
         // Arrange: one ray at 10; gaps across it do not touch, but high/low equality does.
         const prices = [
             { open: 10, high: 11, low: 9, close: 10 },
@@ -353,10 +351,38 @@ for (const [confirmOnClose, showRays] of [[false, false], [false, true], [true, 
         ];
 
         // Act
-        const plots = await runIndicator([100, 0, 0, 0, 0, 0], { confirm_on_close: confirmOnClose, show_rays: showRays }, { prices, unconfirmed: [3] });
+        const plots = await runIndicator([100, 0, 0, 0, 0, 0], { show_rays: showRays }, { prices, unconfirmed: [3, 4] });
 
-        // Assert: no self-touch, no gap touch, and confirmation gates touch alerts too.
-        assert.deepEqual(plots['Test Ray Touch'], [0, 0, 0, confirmOnClose ? 0 : 1, 1, 1]);
+        // Assert: no self-touch or gap touch, but unconfirmed and repeat touches count.
+        assert.deepEqual(plots['Test Ray Touch'], [0, 0, 0, 1, 1, 1]);
+    });
+}
+
+for (const showRays of [false, true]) {
+    test(`unconfirmed events cannot replace saved levels at capacity with visibility ${showRays}`, async () => {
+        // Arrange: an unfinished event at 20 must not replace the saved ray at 10.
+        const prices = [
+            { open: 10, high: 11, low: 9, close: 10 },
+            { open: 12, high: 13, low: 11, close: 12 },
+            { open: 10, high: 21, low: 9, close: 20 },
+            { open: 10, high: 11, low: 9, close: 10 },
+            { open: 10, high: 21, low: 9, close: 20 },
+            { open: 10, high: 11, low: 9, close: 10 },
+        ];
+
+        // Act: a later confirmed event replaces the old ray normally.
+        const context = await runIndicator([100, 10, 300, 0, 400, 0], { ray_limit: 1, show_rays: showRays }, { prices, unconfirmed: [2], rawContext: true });
+
+        // Assert: old-ray touches continue until the confirmed replacement, never afterward.
+        const values = name => context.plots[name].data.map(point => point.value);
+        assert.deepEqual(values('HVC Signal'), [0, 0, 0, 0, 0, 0]);
+        assert.deepEqual(values('HVE Signal'), [1, 0, 0, 0, 1, 0]);
+        assert.deepEqual(values('Test Ray Touch'), [0, 0, 1, 1, 1, 0]);
+        assert.deepEqual(values('Test Ray Count'), [1, 1, 1, 1, 1, 1]);
+        const [ray] = Array.from(context.pine.line.all);
+        assert.equal(context.pine.line.all.length, 1);
+        assert.equal(ray.x1, 4);
+        assert.equal(ray.y1, 20);
     });
 }
 
