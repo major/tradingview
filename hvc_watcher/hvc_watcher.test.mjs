@@ -27,7 +27,7 @@ async function runIndicator(volumes, inputs = {}, { rawContext = false, unconfir
         const confirmed = unconfirmed.map(index => `bar_index != ${index}`).join(' and ');
         source = source.replaceAll('barstate.isconfirmed', `(barstate.isconfirmed and ${confirmed})`);
     }
-    source += '\nplot(is_hvc ? 1 : 0, title = "Test HVC")\nplot(is_hve ? 1 : 0, title = "Test HVE")\nplot(volume_multiplier, title = "Test multiplier")\n';
+    source += '\nplot(is_hvc ? 1 : 0, title = "Test HVC")\nplot(is_hve ? 1 : 0, title = "Test HVE")\nplot(volume_multiplier, title = "Test multiplier")\nplot(ray_touched ? 1 : 0, title = "Test Ray Touch")\nplot(array.size(event_rays), title = "Test Ray Count")\n';
     const bars = volumes.map((volume, index) => ({
         open: 100, high: 102, low: 99, close: 101, ...prices[index], volume,
         openTime: Date.UTC(2020, 0, 1) + index * 86400000,
@@ -192,12 +192,14 @@ test('Data Window diagnostics expose the calculated values', async () => {
     assert.deepEqual(plots['HVE Signal'], [1, 0, 1]);
 });
 
-test('source wires bounded zones, shared formatting, and hidden diagnostics', async () => {
+test('source wires bounded rays, shared formatting, and hidden diagnostics', async () => {
     // Arrange
     const source = await readFile(sourcePath, 'utf8');
 
     // Act / Assert
-    assert.match(source, /zone_length = input\.int\(90,.*maxval = 500/);
+    assert.match(source, /indicator\([^\n]*max_lines_count = 200/);
+    assert.match(source, /ray_limit = input\.int\(100,.*minval = 1, maxval = 200/);
+    assert.doesNotMatch(source, /linefill\.new|show_zones|zone_length/);
     assert.match(source, /\/\/@function[^\n]*\ngetMultiplierText\(value\) =>/);
     assert.match(source, /str\.tostring\(value, '0\.0'\) \+ 'x'/);
     assert.match(source, /na\(value\) \? 'N\/A'/);
@@ -234,7 +236,7 @@ test('the live label shows N/A instead of a stale or absent multiplier', async (
 for (const showLive of [false, true]) {
     test(`historical labels stay within capacity with live label ${showLive}`, async () => {
         // Arrange: length-one, threshold-one volume makes every bar an HVC.
-        const inputs = { sma_length: 1, hvc_threshold: 1.0, show_zones: false, show_multiplier_labels: true, show_current_multiplier: showLive };
+        const inputs = { sma_length: 1, hvc_threshold: 1.0, show_rays: false, show_multiplier_labels: true, show_current_multiplier: showLive };
 
         // Act
         const context = await runIndicator(Array(502).fill(10), inputs, { rawContext: true });
@@ -263,13 +265,13 @@ for (const confirmOnClose of [false, true]) {
             // Act
             const context = await runIndicator([10, 10, 40], inputs, { unconfirmed: [2], rawContext: true });
 
-            // Assert: historical labels, zones, public flags, and markers share the close gate.
+            // Assert: historical labels, rays, public flags, and markers share the close gate.
             const values = name => context.plots[name].data.map(point => point.value);
             assert.deepEqual(values('HVC Signal'), [0, 0, confirmOnClose ? 0 : 1]);
             assert.deepEqual(values('HVE Signal'), [1, 0, confirmOnClose ? 0 : 1]);
             assert.deepEqual(values('HVC (High Volume Close)').map(Boolean), [false, false, !confirmOnClose && !showHve]);
             assert.deepEqual(values('HVE (Highest Volume Ever)').map(Boolean), [showHve, false, !confirmOnClose && showHve]);
-            assert.equal(context.pine.line.all.length, confirmOnClose ? 0 : 2);
+            assert.equal(context.pine.line.all.length, confirmOnClose ? 1 : 2);
             const labels = Array.from(context.pine.label.all);
             assert.equal(labels.length, confirmOnClose ? 1 : 2);
             assert.equal(labels.find(label => label.style === context.pine.label.style_label_upper_left).text, '2.0x');
@@ -297,17 +299,107 @@ test('dependent controls and alert context are wired without changing alert titl
 
     // Act / Assert: TradingView must validate disabled controls and alert placeholder substitution.
     assert.match(source, /confirm_on_close = input\.bool\(false/);
-    assert.match(source, /color_hve = input\.color\([^\n]*active = show_hve_markers/);
-    assert.match(source, /zone_length = input\.int\([^\n]*active = show_zones and not zone_extend_right/);
+    assert.match(source, /color_hve = input\.color\([^\n]*active = show_hve_markers or show_rays/);
+    assert.match(source, /ray_limit = input\.int\([^\n]*active = show_rays/);
     for (const [name, toggle] of [['multiplier_label_color', 'show_multiplier_labels'], ['multiplier_text_color', 'show_multiplier_labels'], ['current_label_color', 'show_current_multiplier'], ['current_text_color', 'show_current_multiplier']]) {
         assert.match(source, new RegExp(`^${name} = input\\.color\\([^\\n]*active = ${toggle}`, 'm'));
     }
     const alerts = source.match(/^alertcondition\(.*$/gm);
-    assert.equal(alerts.length, 3);
+    assert.equal(alerts.length, 4);
     for (const alert of alerts) {
         assert.ok(alert.includes('{{ticker}}'));
         assert.ok(alert.includes('{{interval}}'));
         assert.ok(alert.includes('{{close}}'));
-        assert.ok(alert.includes('{{plot("Volume Multiplier")}}'));
     }
+    assert.ok(alerts.slice(0, 3).every(alert => alert.includes('{{plot("Volume Multiplier")}}')));
+    assert.match(alerts[3], /alertcondition\(ray_touched, title = 'Event Ray Touch'/);
+});
+
+for (const { volumes, anchors, colors } of [
+    { volumes: [10, 10, 40], anchors: [0, 2], colors: ['#4CAF50', '#4CAF50'] },
+    { volumes: [100, 10, 10, 40], anchors: [0, 3], colors: ['#4CAF50', '#FF9800'] },
+]) {
+    test(`close rays use signal colors with HVE markers off (${volumes})`, async () => {
+        // Arrange: HVE-only, overlapping HVC/HVE, and HVC-only events have distinct closes.
+        const prices = volumes.map((_, index) => ({ open: index + 8, high: index + 11, low: index + 7, close: index + 10 }));
+
+        // Act
+        const context = await runIndicator(volumes, {}, { prices, rawContext: true });
+
+        // Assert: exactly one horizontal right ray per event, independent of marker priority.
+        const rays = Array.from(context.pine.line.all);
+        assert.deepEqual(rays.map(ray => ray.x1), anchors);
+        assert.deepEqual(rays.map(ray => ray.color), colors);
+        for (const ray of rays) {
+            assert.equal(ray.y1, prices[ray.x1].close);
+            assert.equal(ray.y2, ray.y1);
+            assert.equal(ray.x2, ray.x1 + 1);
+            assert.equal(ray.extend, 'r');
+        }
+    });
+}
+
+for (const confirmOnClose of [false, true]) {
+    test(`touch alerts include exact boundaries and repeat touches with confirmation ${confirmOnClose}`, async () => {
+        // Arrange: one ray at 10; gaps across it do not touch, but high/low equality does.
+        const prices = [
+            { open: 10, high: 11, low: 9, close: 10 },
+            { open: 8, high: 9, low: 7, close: 8 },
+            { open: 12, high: 13, low: 11, close: 12 },
+            { open: 11, high: 12, low: 10, close: 11 },
+            { open: 9, high: 10, low: 8, close: 9 },
+            { open: 10, high: 11, low: 9, close: 10 },
+        ];
+
+        // Act
+        const plots = await runIndicator([100, 0, 0, 0, 0, 0], { confirm_on_close: confirmOnClose }, { prices, unconfirmed: [3] });
+
+        // Assert: no self-touch, no gap touch, and confirmation gates touch alerts too.
+        assert.deepEqual(plots['Test Ray Touch'], [0, 0, 0, confirmOnClose ? 0 : 1, 1, 1]);
+    });
+}
+
+test('disabling rays also disables touch monitoring without changing event signals', async () => {
+    // Arrange / Act
+    const context = await runIndicator([10, 10, 40], { show_rays: false }, { rawContext: true });
+
+    // Assert
+    assert.equal(context.pine.line.all.length, 0);
+    assert.deepEqual(context.plots['Test Ray Touch'].data.map(point => point.value), [0, 0, 0]);
+    assert.deepEqual(context.plots['HVC Signal'].data.map(point => point.value), [0, 0, 1]);
+    assert.deepEqual(context.plots['HVE Signal'].data.map(point => point.value), [1, 0, 1]);
+});
+
+for (const limit of [1, 100, 200]) {
+    test(`rays retain only the latest ${limit} events without drawing GC`, async () => {
+        // Arrange: every bar is an HVC, with more events than TradingView's line budget.
+        const inputs = { sma_length: 1, hvc_threshold: 1, ray_limit: limit === 100 ? null : limit };
+
+        // Act
+        const context = await runIndicator(Array(202).fill(10), inputs, { rawContext: true });
+
+        // Assert: both the monitored array and live drawings have the same bounded retention.
+        const rays = Array.from(context.pine.line.all);
+        assert.equal(rays.length, limit);
+        assert.equal(Math.min(...rays.map(ray => ray.x1)), 202 - limit);
+        assert.equal(context.plots['Test Ray Count'].data.at(-1).value, limit);
+        assert.ok(context.plots['Test Ray Count'].data.every(point => point.value <= limit));
+    });
+}
+
+test('a retiring ray can alert on its last candle but is not monitored afterward', async () => {
+    // Arrange: the second event touches the old 10 ray and replaces it with a 20 ray.
+    const prices = [
+        { open: 10, high: 11, low: 9, close: 10 },
+        { open: 10, high: 21, low: 9, close: 20 },
+        { open: 10, high: 11, low: 9, close: 10 },
+    ];
+
+    // Act
+    const context = await runIndicator([100, 200, 0], { ray_limit: 1 }, { prices, rawContext: true });
+
+    // Assert
+    assert.deepEqual(context.plots['Test Ray Touch'].data.map(point => point.value), [0, 1, 0]);
+    assert.equal(context.pine.line.all.length, 1);
+    assert.equal(Array.from(context.pine.line.all)[0].y1, 20);
 });

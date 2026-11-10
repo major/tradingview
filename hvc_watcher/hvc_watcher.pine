@@ -26,21 +26,17 @@ hvc_threshold_weekly = input.float(2.0, title = 'HVC Multiplier: Weekly', minval
 hvc_threshold_monthly = input.float(2.0, title = 'HVC Multiplier: Monthly and Above', minval = 1.0, step = 0.1, group = 'Volume Settings', tooltip = 'Minimum multiple of the current-inclusive volume SMA for HVC on monthly charts, including quarterly and yearly charts.')
 
 // Signal timing is independent of display settings and the running HVE record.
-confirm_on_close = input.bool(false, title = 'Confirm Signals at Bar Close', group = 'Signal Timing', tooltip = 'Wait for the bar to close before showing signals, signal labels, zones, or alert eligibility. The current-bar multiplier remains live. Disabled preserves intrabar signals.')
+confirm_on_close = input.bool(false, title = 'Confirm Signals at Bar Close', group = 'Signal Timing', tooltip = 'Wait for the bar to close before showing signals, signal labels, rays, or event and ray-touch alert eligibility. The current-bar multiplier remains live. Disabled preserves intrabar signals.')
+
+// Each event uses one line. Keep the retention cap within indicator max_lines_count.
+show_rays = input.bool(true, title = 'Show Event Rays', group = 'Rays', tooltip = 'Replace high/low zones with horizontal rays at each HVC or HVE close. HVE takes priority when both occur, regardless of marker visibility. Turning this off also disables ray-touch alerts.')
+ray_limit = input.int(100, title = 'Maximum Event Rays', minval = 1, maxval = 200, group = 'Rays', tooltip = 'Keep and monitor this many recent events. Older rays are deleted. A new event candle can still alert on a ray it replaces.', active = show_rays)
 
 // Marker settings
 show_hve_markers = input.bool(false, title = 'Show HVE Markers', group = 'Markers', tooltip = 'Show Highest Volume Ever (HVE) markers. When disabled, bars that are both HVC and HVE will still display as HVC.')
-color_hve = input.color(color.green, title = 'HVE Color', group = 'Markers', tooltip = 'Color for a volume record over earlier loaded chart history, not necessarily an all-time record', active = show_hve_markers)
-color_hvc = input.color(color.orange, title = 'HVC Color', group = 'Markers', tooltip = 'Color for High Volume Close (HVC) markers - bars where volume exceeds the SMA threshold')
+color_hve = input.color(color.green, title = 'HVE Color', group = 'Markers', tooltip = 'Marker and ray color for a volume record over earlier loaded chart history, not necessarily an all-time record', active = show_hve_markers or show_rays)
+color_hvc = input.color(color.orange, title = 'HVC Color', group = 'Markers', tooltip = 'Marker and ray color for High Volume Close (HVC) - bars where volume exceeds the SMA threshold')
 shape_style = input.string('circles', title = 'Shape Style', options = ['circles', 'triangleup', 'diamond', 'cross', 'xcross'], group = 'Markers')
-
-// Zone settings
-show_zones = input.bool(true, title = 'Show HVC Zones', group = 'Zones', tooltip = 'Draw horizontal zones marking the high/low range of HVC bars')
-zone_extend_right = input.bool(false, title = 'Extend Zones Right', group = 'Zones', tooltip = 'Extend zones to the right edge of the chart (useful for support/resistance). When disabled, zones have a fixed length.', active = show_zones)
-zone_length = input.int(90, title = 'Zone Length (bars)', minval = 1, maxval = 500, group = 'Zones', tooltip = 'Number of bars to extend fixed zones, up to the 500-bar drawing limit', active = show_zones and not zone_extend_right)
-zone_color = input.color(color.blue, title = 'Zone Color', group = 'Zones', active = show_zones)
-zone_transparency = input.int(95, title = 'Zone Fill Transparency (%)', minval = 0, maxval = 100, group = 'Zones', active = show_zones)
-zone_edge_transparency = input.int(80, title = 'Zone Edge Transparency (%)', minval = 0, maxval = 100, group = 'Zones', active = show_zones)
 
 // Label settings
 show_multiplier_labels = input.bool(false, title = 'Show Volume Multiplier Labels', group = 'Labels', tooltip = 'Display the rounded volume multiplier (e.g., 3.4x) next to HVC bars')
@@ -117,15 +113,22 @@ if show_multiplier_labels and is_hvc and volume_sma > 0
               size = size.normal)
     array.push(multiplier_labels, multiplier_label)
 
-// HVC zones
-if show_zones and is_hvc
-    fillColor = color.new(zone_color, zone_transparency)
-    edgeColor = color.new(zone_color, zone_edge_transparency)
-    zone_end = zone_extend_right ? bar_index + 1 : bar_index + zone_length
-    zone_extend = zone_extend_right ? extend.right : extend.none
-    topLine = line.new(bar_index, high, zone_end, high, extend = zone_extend, color = edgeColor)
-    bottomLine = line.new(bar_index, low, zone_end, low, extend = zone_extend, color = edgeColor)
-    linefill.new(topLine, bottomLine, color = fillColor)
+// Check older rays before adding this candle's ray, so an event cannot touch itself.
+var array<line> event_rays = array.new<line>()
+ray_touched = false
+if show_rays and signals_ready
+    for event_ray in event_rays
+        ray_price = line.get_y1(event_ray)
+        if bar_index > line.get_x1(event_ray) and low <= ray_price and high >= ray_price
+            ray_touched := true
+
+// Explicit deletion keeps visible and monitored rays in sync without drawing GC.
+if show_rays and (is_hvc or is_hve)
+    if array.size(event_rays) >= ray_limit
+        line.delete(array.shift(event_rays))
+    ray_color = is_hve ? color_hve : color_hvc
+    event_ray = line.new(bar_index, close, bar_index + 1, close, extend = extend.right, color = ray_color)
+    array.push(event_rays, event_ray)
 
 // Current bar multiplier
 if show_current_multiplier and barstate.islast
@@ -139,6 +142,7 @@ if show_current_multiplier and barstate.islast
 alertcondition(is_hve, title = 'HVE', message = 'HVE (loaded-history volume record) on {{ticker}} [{{interval}}], close={{close}}, volume multiplier={{plot("Volume Multiplier")}}x')
 alertcondition(is_hvc, title = 'HVC', message = 'HVC on {{ticker}} [{{interval}}], close={{close}}, volume multiplier={{plot("Volume Multiplier")}}x')
 alertcondition(is_hve or is_hvc, title = 'HVE or HVC', message = 'HVE or HVC on {{ticker}} [{{interval}}], close={{close}}, volume multiplier={{plot("Volume Multiplier")}}x')
+alertcondition(ray_touched, title = 'Event Ray Touch', message = 'Price touched an earlier HVC/HVE close ray on {{ticker}} [{{interval}}], close={{close}}')
 
 // Display current values in data window
 plot(volume, title = 'Volume', color = na, editable = false, display = display.data_window)
