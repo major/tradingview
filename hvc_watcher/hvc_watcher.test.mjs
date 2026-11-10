@@ -198,7 +198,8 @@ test('source wires bounded rays, shared formatting, and hidden diagnostics', asy
 
     // Act / Assert
     assert.match(source, /indicator\([^\n]*max_lines_count = 200/);
-    assert.match(source, /ray_limit = input\.int\(100,.*minval = 1, maxval = 200/);
+    assert.match(source, /show_rays = input\.bool\(false/);
+    assert.match(source, /ray_limit = input\.int\(10,.*minval = 1, maxval = 200/);
     assert.doesNotMatch(source, /linefill\.new|show_zones|zone_length/);
     assert.match(source, /\/\/@function[^\n]*\ngetMultiplierText\(value\) =>/);
     assert.match(source, /str\.tostring\(value, '0\.0'\) \+ 'x'/);
@@ -300,7 +301,7 @@ test('dependent controls and alert context are wired without changing alert titl
     // Act / Assert: TradingView must validate disabled controls and alert placeholder substitution.
     assert.match(source, /confirm_on_close = input\.bool\(false/);
     assert.match(source, /color_hve = input\.color\([^\n]*active = show_hve_markers or show_rays/);
-    assert.match(source, /ray_limit = input\.int\([^\n]*active = show_rays/);
+    assert.doesNotMatch(source.match(/^ray_limit = .*$/m)[0], /active =/);
     for (const [name, toggle] of [['multiplier_label_color', 'show_multiplier_labels'], ['multiplier_text_color', 'show_multiplier_labels'], ['current_label_color', 'show_current_multiplier'], ['current_text_color', 'show_current_multiplier']]) {
         assert.match(source, new RegExp(`^${name} = input\\.color\\([^\\n]*active = ${toggle}`, 'm'));
     }
@@ -324,7 +325,7 @@ for (const { volumes, anchors, colors } of [
         const prices = volumes.map((_, index) => ({ open: index + 8, high: index + 11, low: index + 7, close: index + 10 }));
 
         // Act
-        const context = await runIndicator(volumes, {}, { prices, rawContext: true });
+        const context = await runIndicator(volumes, { show_rays: true }, { prices, rawContext: true });
 
         // Assert: exactly one horizontal right ray per event, independent of marker priority.
         const rays = Array.from(context.pine.line.all);
@@ -339,8 +340,8 @@ for (const { volumes, anchors, colors } of [
     });
 }
 
-for (const confirmOnClose of [false, true]) {
-    test(`touch alerts include exact boundaries and repeat touches with confirmation ${confirmOnClose}`, async () => {
+for (const [confirmOnClose, showRays] of [[false, false], [false, true], [true, false], [true, true]]) {
+    test(`touch boundaries and repeat touches with confirmation ${confirmOnClose}, visibility ${showRays}`, async () => {
         // Arrange: one ray at 10; gaps across it do not touch, but high/low equality does.
         const prices = [
             { open: 10, high: 11, low: 9, close: 10 },
@@ -352,28 +353,30 @@ for (const confirmOnClose of [false, true]) {
         ];
 
         // Act
-        const plots = await runIndicator([100, 0, 0, 0, 0, 0], { confirm_on_close: confirmOnClose }, { prices, unconfirmed: [3] });
+        const plots = await runIndicator([100, 0, 0, 0, 0, 0], { confirm_on_close: confirmOnClose, show_rays: showRays }, { prices, unconfirmed: [3] });
 
         // Assert: no self-touch, no gap touch, and confirmation gates touch alerts too.
         assert.deepEqual(plots['Test Ray Touch'], [0, 0, 0, confirmOnClose ? 0 : 1, 1, 1]);
     });
 }
 
-test('disabling rays also disables touch monitoring without changing event signals', async () => {
+test('rays are hidden by default without disabling touch monitoring or event signals', async () => {
     // Arrange / Act
-    const context = await runIndicator([10, 10, 40], { show_rays: false }, { rawContext: true });
+    const context = await runIndicator([100, 10, 10, 40], {}, { rawContext: true });
 
     // Assert
-    assert.equal(context.pine.line.all.length, 0);
-    assert.deepEqual(context.plots['Test Ray Touch'].data.map(point => point.value), [0, 0, 0]);
-    assert.deepEqual(context.plots['HVC Signal'].data.map(point => point.value), [0, 0, 1]);
-    assert.deepEqual(context.plots['HVE Signal'].data.map(point => point.value), [1, 0, 1]);
+    const rays = Array.from(context.pine.line.all);
+    assert.equal(rays.length, 2);
+    assert.ok(rays.every(ray => ray.color == null || Number.isNaN(ray.color)));
+    assert.deepEqual(context.plots['Test Ray Touch'].data.map(point => point.value), [0, 1, 1, 1]);
+    assert.deepEqual(context.plots['HVC Signal'].data.map(point => point.value), [0, 0, 0, 1]);
+    assert.deepEqual(context.plots['HVE Signal'].data.map(point => point.value), [1, 0, 0, 0]);
 });
 
-for (const limit of [1, 100, 200]) {
-    test(`rays retain only the latest ${limit} events without drawing GC`, async () => {
+for (const [limit, showRays] of [[1, false], [10, false], [200, false], [1, true], [10, true], [200, true]]) {
+    test(`rays retain only the latest ${limit} events with visibility ${showRays}`, async () => {
         // Arrange: every bar is an HVC, with more events than TradingView's line budget.
-        const inputs = { sma_length: 1, hvc_threshold: 1, ray_limit: limit === 100 ? null : limit };
+        const inputs = { sma_length: 1, hvc_threshold: 1, ray_limit: limit === 10 ? null : limit, show_rays: showRays };
 
         // Act
         const context = await runIndicator(Array(202).fill(10), inputs, { rawContext: true });
