@@ -116,6 +116,7 @@ for event_ray in event_rays
     ray_price = line.get_y1(event_ray)
     if bar_index > line.get_x1(event_ray) and low <= ray_price and high >= ray_price
         ray_touched := true
+        break
 
 // Hidden rays still store alert levels. Explicit deletion bounds both modes without drawing GC.
 if is_hvc or is_hve
