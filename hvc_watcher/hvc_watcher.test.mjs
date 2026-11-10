@@ -298,7 +298,10 @@ test('dependent controls and alert context are wired without changing alert titl
 
     // Act / Assert: TradingView must validate disabled controls and alert placeholder substitution.
     assert.doesNotMatch(source, /confirm_on_close|signals_ready|Signal Timing/);
-    assert.match(source, /color_hve = input\.color\([^\n]*active = show_hve_markers or show_rays/);
+    assert.match(source, /^color_hve = input\.color\([^\n]*active = show_hve_markers\)$/m);
+    for (const [name, color] of [['ray_color_hve', 'green'], ['ray_color_hvc', 'orange']]) {
+        assert.match(source, new RegExp(`^${name} = input\\.color\\(color\\.${color},[^\\n]*group = 'Rays'[^\\n]*active = show_rays\\)$`, 'm'));
+    }
     assert.doesNotMatch(source.match(/^ray_limit = .*$/m)[0], /active =/);
     for (const [name, toggle] of [['multiplier_label_color', 'show_multiplier_labels'], ['multiplier_text_color', 'show_multiplier_labels'], ['current_label_color', 'show_current_multiplier'], ['current_text_color', 'show_current_multiplier']]) {
         assert.match(source, new RegExp(`^${name} = input\\.color\\([^\\n]*active = ${toggle}`, 'm'));
@@ -314,9 +317,9 @@ test('dependent controls and alert context are wired without changing alert titl
     assert.match(alerts[3], /alertcondition\(ray_touched, title = 'Event Ray Touch'/);
 });
 
-test('marker color inputs preserve their selected opacity', async () => {
+test('marker color and opacity changes preserve ray defaults', async () => {
     // Arrange: separate HVE and HVC events expose both marker color inputs.
-    const inputs = { show_hve_markers: true, color_hve: 'color.new(color.blue, 50)', color_hvc: 'color.new(color.red, 25)' };
+    const inputs = { show_rays: true, show_hve_markers: true, color_hve: 'color.new(color.blue, 50)', color_hvc: 'color.new(color.red, 25)' };
 
     // Act
     const context = await runIndicator([100, 10, 10, 40], inputs, { rawContext: true });
@@ -324,18 +327,44 @@ test('marker color inputs preserve their selected opacity', async () => {
     // Assert: Pine color inputs include their alpha channel, not just the RGB value.
     assert.equal(context.plots['HVE (Highest Volume Ever)'].data[0].options.color, '#2962FF80');
     assert.equal(context.plots['HVC (High Volume Close)'].data[3].options.color, '#F23645BF');
+    assert.deepEqual(Array.from(context.pine.line.all, ray => ray.color), ['#4CAF50', '#FF9800']);
 });
 
-for (const { volumes, anchors, colors } of [
+for (const showRays of [false, true]) {
+    test(`ray color and opacity changes preserve markers and touch alerts with visibility ${showRays}`, async () => {
+        // Arrange: a fully transparent HVE ray and partially transparent HVC ray.
+        const inputs = { show_rays: showRays, show_hve_markers: true, ray_color_hve: 'color.new(color.purple, 100)', ray_color_hvc: 'color.new(color.blue, 50)' };
+
+        // Act
+        const context = await runIndicator([100, 10, 10, 40], inputs, { rawContext: true });
+
+        // Assert: picker alpha is retained, visibility wins, and neither affects eligibility.
+        const rays = Array.from(context.pine.line.all);
+        assert.equal(rays.length, 2);
+        if (showRays) {
+            assert.deepEqual(rays.map(ray => ray.color), ['#9C27B000', '#2962FF80']);
+        } else {
+            assert.ok(rays.every(ray => ray.color == null || Number.isNaN(ray.color)));
+        }
+        assert.equal(context.plots['HVE (Highest Volume Ever)'].data[0].options.color, '#4CAF50');
+        assert.equal(context.plots['HVC (High Volume Close)'].data[3].options.color, '#FF9800');
+        assert.deepEqual(context.plots['Test Ray Touch'].data.map(point => point.value), [0, 1, 1, 1]);
+        assert.deepEqual(context.plots['HVC Signal'].data.map(point => point.value), [0, 0, 0, 1]);
+        assert.deepEqual(context.plots['HVE Signal'].data.map(point => point.value), [1, 0, 0, 0]);
+    });
+}
+
+for (const { volumes, anchors, colors, inputs = {} } of [
     { volumes: [10, 10, 40], anchors: [0, 2], colors: ['#4CAF50', '#4CAF50'] },
     { volumes: [100, 10, 10, 40], anchors: [0, 3], colors: ['#4CAF50', '#FF9800'] },
+    { volumes: [10, 10, 40], anchors: [0, 2], colors: ['#2962FF80', '#2962FF80'], inputs: { ray_color_hve: 'color.new(color.blue, 50)', ray_color_hvc: 'color.new(color.red, 25)' } },
 ]) {
-    test(`close rays use signal colors with HVE markers off (${volumes})`, async () => {
+    test(`close rays use signal colors with HVE markers off (${volumes}; ${colors})`, async () => {
         // Arrange: HVE-only, overlapping HVC/HVE, and HVC-only events have distinct closes.
         const prices = volumes.map((_, index) => ({ open: index + 8, high: index + 11, low: index + 7, close: index + 10 }));
 
         // Act
-        const context = await runIndicator(volumes, { show_rays: true }, { prices, rawContext: true });
+        const context = await runIndicator(volumes, { show_rays: true, ...inputs }, { prices, rawContext: true });
 
         // Assert: exactly one horizontal right ray per event, independent of marker priority.
         const rays = Array.from(context.pine.line.all);

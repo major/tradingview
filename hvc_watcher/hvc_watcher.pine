@@ -28,11 +28,13 @@ hvc_threshold_monthly = input.float(2.0, title = 'HVC Multiplier: Monthly and Ab
 // Each event uses one line. Keep the retention cap within indicator max_lines_count.
 show_rays = input.bool(false, title = 'Show Event Rays', group = 'Rays', tooltip = 'Show horizontal rays at each HVC or HVE close. HVE takes priority when both occur, regardless of marker visibility. Hidden rays are still retained and monitored for touch alerts.')
 ray_limit = input.int(5, title = 'Maximum Event Rays', minval = 1, maxval = 200, group = 'Rays', tooltip = 'Keep and monitor this many recent events, even when rays are hidden. Older rays are deleted. A new event candle can still alert on a ray it replaces.')
+ray_color_hve = input.color(color.green, title = 'HVE Ray Color', group = 'Rays', tooltip = 'Color and opacity for HVE rays only. Does not change HVE markers or touch alerts.', active = show_rays)
+ray_color_hvc = input.color(color.orange, title = 'HVC Ray Color', group = 'Rays', tooltip = 'Color and opacity for HVC rays only. Does not change HVC markers or touch alerts.', active = show_rays)
 
 // Marker settings
 show_hve_markers = input.bool(false, title = 'Show HVE Markers', group = 'Markers', tooltip = 'Show Highest Volume Ever (HVE) markers. When disabled, bars that are both HVC and HVE will still display as HVC.')
-color_hve = input.color(color.green, title = 'HVE Color', group = 'Markers', tooltip = 'Marker and ray color for a volume record over earlier loaded chart history, not necessarily an all-time record', active = show_hve_markers or show_rays)
-color_hvc = input.color(color.orange, title = 'HVC Color', group = 'Markers', tooltip = 'Marker and ray color for High Volume Close (HVC) - bars where volume exceeds the SMA threshold')
+color_hve = input.color(color.green, title = 'HVE Color', group = 'Markers', tooltip = 'Marker color and opacity for a volume record over earlier loaded chart history, not necessarily an all-time record. Does not change HVE rays.', active = show_hve_markers)
+color_hvc = input.color(color.orange, title = 'HVC Color', group = 'Markers', tooltip = 'Marker color and opacity for High Volume Close (HVC) - bars where volume exceeds the SMA threshold. Does not change HVC rays.')
 shape_style = input.string('circles', title = 'Shape Style', options = ['circles', 'triangleup', 'diamond', 'cross', 'xcross'], group = 'Markers')
 
 // Label settings
@@ -122,7 +124,7 @@ for event_ray in event_rays
 if is_hvc or is_hve
     if array.size(event_rays) >= ray_limit
         line.delete(array.shift(event_rays))
-    ray_color = show_rays ? (is_hve ? color_hve : color_hvc) : na
+    ray_color = show_rays ? (is_hve ? ray_color_hve : ray_color_hvc) : na
     event_ray = line.new(bar_index, close, bar_index + 1, close, extend = extend.right, color = ray_color)
     array.push(event_rays, event_ray)
 
