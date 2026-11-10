@@ -20,6 +20,23 @@ Watch for High Volume Closes (HVC) and unusual volume patterns.
 
 Each multiplier has a minimum of 1.0x and a step of 0.1x. The selected setting applies consistently to HVC markers, labels, rays, alerts, and the Data Window comparison threshold. HVE detection is unchanged.
 
+### From event to price level 🔍
+
+```text
+┌──────────────────┐     ┌──────────────────┐
+│ Event bar closes │ --> │ HVC or HVE?      │
+└──────────────────┘     └──────────────────┘
+                                  |
+                                 Yes
+                                  v
+                         ┌──────────────────┐
+                         │ Retain its close │
+                         │ One ray per bar  │
+                         └──────────────────┘
+```
+
+If neither signal qualifies, no level is added. If both qualify, the candle adds **one HVE ray** (green by default), not two rays. HVE marker visibility does not change this choice. The level is the candle's finalized close, not its high or low.
+
 ## Display and alerts
 
 * **Show Event Rays** is off by default and controls visibility only. Each confirmed HVC or HVE event retains one horizontal ray at its candle's finalized close, extending right, even while hidden. Enable the checkbox to show the rays instead of the former high/low rectangles. Visible rays default to 🟢 green for HVE and 🟠 orange for HVC and share the configurable marker colors. An event that is both uses the HVE color even when HVE markers are hidden. HVE-only events also retain rays, including before SMA warm-up.
@@ -31,15 +48,64 @@ Each multiplier has a minimum of 1.0x and a step of 0.1x. The selected setting a
 * HVE, HVC, and combined alerts include the ticker, timeframe, close, and volume multiplier. HVE can occur before SMA warm-up, so its alert multiplier can be unavailable. TradingView substitutes the alert placeholders when the alert fires.
 * TradingView alerts use a snapshot of the script and settings. Delete and recreate alerts after editing the script or changing settings you want reflected in the alert.
 
+### Five events, not five bars 📌
+
+The default limit keeps the **latest five qualifying event candles** in the loaded chart history. These events can span many chart bars. With the default limit, a sixth event removes the oldest level before saving its own close:
+
+| State | Retained event levels, oldest to newest |
+| --- | --- |
+| Before event 6 closes | Event 1, Event 2, Event 3, Event 4, Event 5 |
+| After event 6 closes | Event 2, Event 3, Event 4, Event 5, Event 6 |
+
+An unfinished event does not remove or replace a level. Touching a retained level does not remove it either. An older level can still trigger a touch on the candle that retires it, because touches are checked before replacement.
+
 ### Ray-touch alerts 🔔
 
 Create a TradingView alert with the condition **HVC Watcher → Event Ray Touch**. It becomes eligible when a later candle's low is at or below an existing ray and its high is at or above that ray. Exact high/low equality counts. The originating candle does not count, and a gap across a level does not count unless the candle's range includes it.
+
+```text
+┌────────────────────────────┐
+│ Later candle updates       │
+└────────────────────────────┘
+              |
+              v
+┌────────────────────────────┐
+│ low <= level <= high?      │ --> No: no touch alert
+└────────────────────────────┘
+              |
+             Yes
+              v
+┌────────────────────────────┐
+│ Touch condition is true    │
+│ Hidden or visible: same    │
+└────────────────────────────┘
+              |
+              v
+┌────────────────────────────┐
+│ TradingView delivers alert │
+│ At the selected frequency  │
+└────────────────────────────┘
+```
+
+This flow checks previously retained levels, not the current candle's newly created ray. It stops at the first match, so touching several levels still produces one shared alert condition.
 
 * Any retained HVE or HVC ray can trigger the condition. Multiple touched rays share one condition; the message includes the ticker, timeframe, and current close, not a separate price or message for each ray.
 * The same ray can trigger again on a later candle. Choose **Once Per Bar** or **Once Per Bar Close** in TradingView to avoid repeated delivery within one candle.
 * Touch detection on previously saved levels stays live during the current candle. TradingView's alert frequency controls intrabar or closing delivery. New rays are only saved at the event candle's finalized close, so they never follow a developing close. A delivered alert cannot be rolled back.
 * Touches are checked before a confirmed event's new ray replaces the oldest one. A retiring ray can alert on its final candle, but is not monitored on later candles. An unfinished event cannot replace a retained level.
 * Turning **Show Event Rays** off only hides the lines. Touch monitoring and the existing HVC/HVE event alerts work with either visibility setting. Recreate alerts after changing the script or relevant settings.
+
+### Changing settings after creating an alert ⚙️
+
+An existing alert keeps its own snapshot of the script and inputs, separate from the chart. For example:
+
+| Action | Chart indicator | Existing alert |
+| --- | --- | --- |
+| Create a touch alert with a limit of 10 | Monitors 10 events | Monitors 10 events |
+| Change the chart's limit to 5 | Monitors 5 events | Still monitors 10 events |
+| Delete the alert and recreate it with the chart limit at 5 | Monitors 5 events | New alert monitors 5 events |
+
+Changing the script's default does not update existing alerts. Do not assume it changed a saved chart input either: verify **Maximum Event Rays** in the chart settings before creating a replacement alert. The **Show Event Rays** checkbox only affects drawing visibility; either setting supports touch alerts.
 
 ## Event timing 🔔
 
@@ -65,7 +131,7 @@ PineTS is a compatibility runtime, not TradingView's compiler or realtime engine
 
 ### Manual TradingView checklist
 
-1. Compile in Pine Editor and add to a standard chart. Compare historical markers with the prior version on a positive-volume symbol using the same history and settings. Weekly and monthly defaults now use 2.0x instead of 3.0x; set all three multipliers to the prior threshold for a like-for-like comparison. Switch between intraday, daily, 2D, weekly, 2W, monthly, 3M, and 12M charts, and verify that changing one multiplier affects only its timeframe group.
+1. Compile in Pine Editor and add to a standard chart. Compare historical markers on a positive-volume symbol using the same history and explicitly matched multiplier settings. Switch between intraday, daily, 2D, weekly, 2W, monthly, 3M, and 12M charts, and verify that changing one multiplier affects only its timeframe group.
 2. Inspect threshold equality and SMA warm-up in the Data Window. Check a no-volume symbol and missing-volume gaps. Pine's SMA uses valid samples, so missing data can extend warm-up beyond the configured number of chart bars.
 3. Confirm rays are hidden by default and Maximum Event Rays defaults to 5. Enable Show Event Rays and check close-price rays with HVE markers off and on. Verify HVE-only and overlapping events are green, HVC-only events are orange, and no rectangles remain. Change the shared colors, toggle rays off, and confirm Maximum Event Rays stays enabled. Set the limit to 1, 5, and 200 with more qualifying events than each limit; only the newest rays should remain when made visible. For a quick stress check, use SMA length 1 and the chart timeframe's threshold set to 1. Restore normal settings afterward.
 4. Enable both label options. Inspect decimal formatting and an unavailable multiplier. For a capacity stress check, use SMA length 1, the chart timeframe's threshold set to 1, and more than 500 positive-volume bars with rays off. Confirm 499 historical labels plus the live label remain; with the live label off, retain 500 historical labels. Restore normal settings afterward.
