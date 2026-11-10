@@ -27,7 +27,7 @@ hvc_threshold_monthly = input.float(2.0, title = 'HVC Multiplier: Monthly and Ab
 
 // Each event uses one line. Keep the retention cap within indicator max_lines_count.
 show_rays = input.bool(false, title = 'Show Event Rays', group = 'Rays', tooltip = 'Show horizontal rays at each HVC or HVE close. HVE takes priority when both occur, regardless of marker visibility. Hidden rays are still retained and monitored for touch alerts.')
-ray_limit = input.int(10, title = 'Maximum Event Rays', minval = 1, maxval = 200, group = 'Rays', tooltip = 'Keep and monitor this many recent events, even when rays are hidden. Older rays are deleted. A new event candle can still alert on a ray it replaces.')
+ray_limit = input.int(5, title = 'Maximum Event Rays', minval = 1, maxval = 200, group = 'Rays', tooltip = 'Keep and monitor this many recent events, even when rays are hidden. Older rays are deleted. A new event candle can still alert on a ray it replaces.')
 
 // Marker settings
 show_hve_markers = input.bool(false, title = 'Show HVE Markers', group = 'Markers', tooltip = 'Show Highest Volume Ever (HVE) markers. When disabled, bars that are both HVC and HVE will still display as HVC.')

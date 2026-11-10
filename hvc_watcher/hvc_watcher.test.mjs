@@ -199,7 +199,7 @@ test('source wires bounded rays, shared formatting, and hidden diagnostics', asy
     // Act / Assert
     assert.match(source, /indicator\([^\n]*max_lines_count = 200/);
     assert.match(source, /show_rays = input\.bool\(false/);
-    assert.match(source, /ray_limit = input\.int\(10,.*minval = 1, maxval = 200/);
+    assert.match(source, /ray_limit = input\.int\(5,.*minval = 1, maxval = 200/);
     assert.doesNotMatch(source, /linefill\.new|show_zones|zone_length/);
     assert.match(source, /\/\/@function[^\n]*\ngetMultiplierText\(value\) =>/);
     assert.match(source, /str\.tostring\(value, '0\.0'\) \+ 'x'/);
@@ -399,10 +399,10 @@ test('rays are hidden by default without disabling touch monitoring or event sig
     assert.deepEqual(context.plots['HVE Signal'].data.map(point => point.value), [1, 0, 0, 0]);
 });
 
-for (const [limit, showRays] of [[1, false], [10, false], [200, false], [1, true], [10, true], [200, true]]) {
+for (const [limit, showRays] of [[1, false], [5, false], [200, false], [1, true], [5, true], [200, true]]) {
     test(`rays retain only the latest ${limit} events with visibility ${showRays}`, async () => {
         // Arrange: every bar is an HVC, with more events than TradingView's line budget.
-        const inputs = { sma_length: 1, hvc_threshold: 1, ray_limit: limit === 10 ? null : limit, show_rays: showRays };
+        const inputs = { sma_length: 1, hvc_threshold: 1, ray_limit: limit === 5 ? null : limit, show_rays: showRays };
 
         // Act
         const context = await runIndicator(Array(202).fill(10), inputs, { rawContext: true });
