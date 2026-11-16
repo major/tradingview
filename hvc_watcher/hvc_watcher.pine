@@ -20,10 +20,11 @@ indicator('HVC Watcher', shorttitle = 'HVC Watch', overlay = true, max_lines_cou
 // ═══════════════════════════════════════════════════════════════
 
 // Volume settings
-sma_length = input.int(20, title = 'Volume SMA Length', minval = 1, group = 'Volume Settings', tooltip = 'Volume SMA includes the current bar. A length of 1 cannot produce a multiplier above 1. Volume units depend on the symbol and feed.')
-hvc_threshold = input.float(3.0, title = 'HVC Multiplier: Daily and Below', minval = 1.0, step = 0.1, group = 'Volume Settings', tooltip = 'Minimum multiple of the current-inclusive volume SMA for HVC on daily and intraday charts. Also applies to multi-day charts such as 2D.')
-hvc_threshold_weekly = input.float(2.0, title = 'HVC Multiplier: Weekly', minval = 1.0, step = 0.1, group = 'Volume Settings', tooltip = 'Minimum multiple of the current-inclusive volume SMA for HVC on weekly charts, including multi-week charts such as 2W.')
-hvc_threshold_monthly = input.float(2.0, title = 'HVC Multiplier: Monthly and Above', minval = 1.0, step = 0.1, group = 'Volume Settings', tooltip = 'Minimum multiple of the current-inclusive volume SMA for HVC on monthly charts, including quarterly and yearly charts.')
+sma_length = input.int(20, title = 'Volume SMA Length', minval = 1, group = 'Volume Settings', tooltip = 'Number of bars in the volume SMA. With Exclude Current Bar on, these are the bars before the current bar, so a length of 1 compares each bar with the previous bar. With it off, the current bar is the newest bar in the average, so a length of 1 cannot produce a multiplier above 1. Volume units depend on the symbol and feed.')
+exclude_current_bar = input.bool(true, title = 'Exclude Current Bar from Volume SMA', group = 'Volume Settings', tooltip = 'On: the baseline is the SMA of the prior bars, so a volume spike cannot inflate its own average. Off: the current bar is included in the SMA, which lowers its multiplier.')
+hvc_threshold = input.float(3.0, title = 'HVC Multiplier: Daily and Below', minval = 1.0, step = 0.1, group = 'Volume Settings', tooltip = 'Minimum multiple of the volume SMA for HVC on daily and intraday charts. Also applies to multi-day charts such as 2D.')
+hvc_threshold_weekly = input.float(2.0, title = 'HVC Multiplier: Weekly', minval = 1.0, step = 0.1, group = 'Volume Settings', tooltip = 'Minimum multiple of the volume SMA for HVC on weekly charts, including multi-week charts such as 2W.')
+hvc_threshold_monthly = input.float(2.0, title = 'HVC Multiplier: Monthly and Above', minval = 1.0, step = 0.1, group = 'Volume Settings', tooltip = 'Minimum multiple of the volume SMA for HVC on monthly charts, including quarterly and yearly charts.')
 
 // Each event uses one line. Keep the retention cap within indicator max_lines_count.
 show_rays = input.bool(false, title = 'Show Event Rays', group = 'Rays', tooltip = 'Show horizontal rays at each HVC or HVE close. HVE takes priority when both occur, regardless of marker visibility. Hidden rays are still retained and monitored for touch alerts.')
@@ -41,7 +42,7 @@ shape_style = input.string('circles', title = 'Shape Style', options = ['circles
 show_multiplier_labels = input.bool(false, title = 'Show Volume Multiplier Labels', group = 'Labels', tooltip = 'Display the rounded volume multiplier (e.g., 3.4x) next to HVC bars')
 multiplier_label_color = input.color(color.orange, title = 'Multiplier Label Background', group = 'Labels', inline = 'hvc_label_colors', active = show_multiplier_labels)
 multiplier_text_color = input.color(color.black, title = 'Multiplier Label Text', group = 'Labels', inline = 'hvc_label_colors', active = show_multiplier_labels)
-show_current_multiplier = input.bool(false, title = 'Show Current Bar Multiplier', group = 'Labels', tooltip = 'Live volume divided by the current-inclusive SMA, not projected closing volume. Updates before bar close and shows N/A without a valid baseline.')
+show_current_multiplier = input.bool(false, title = 'Show Current Bar Multiplier', group = 'Labels', tooltip = 'Live volume divided by the volume SMA baseline, not projected closing volume. Updates before bar close and shows N/A without a valid baseline.')
 current_label_color = input.color(color.new(color.blue, 50), title = 'Current Bar Label Background', group = 'Labels', inline = 'current_label_colors', active = show_current_multiplier)
 current_text_color = input.color(color.white, title = 'Current Bar Label Text', group = 'Labels', inline = 'current_label_colors', active = show_current_multiplier)
 
@@ -51,7 +52,9 @@ current_text_color = input.color(color.white, title = 'Current Bar Label Text', 
 
 // Pine classifies quarterly and yearly charts as monthly multiples; multi-day charts use the daily setting.
 active_hvc_threshold = timeframe.ismonthly ? hvc_threshold_monthly : timeframe.isweekly ? hvc_threshold_weekly : hvc_threshold
-volume_sma = ta.sma(volume, sma_length)
+// Call ta.sma on every bar, then optionally shift it so the current bar never inflates its own average.
+volume_sma_current = ta.sma(volume, sma_length)
+volume_sma = exclude_current_bar ? volume_sma_current[1] : volume_sma_current
 volume_multiplier = not na(volume) and not na(volume_sma) and volume_sma > 0 ? volume / volume_sma : na
 
 // Detection flags

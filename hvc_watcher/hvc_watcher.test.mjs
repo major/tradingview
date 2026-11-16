@@ -18,7 +18,7 @@ function replaceInput(source, name, value) {
 /** Run synthetic volume and optional OHLC overrides; null preserves an input's default. */
 async function runIndicator(volumes, inputs = {}, { rawContext = false, unconfirmed = [], timeframe = 'D', prices = [] } = {}) {
     let source = await readFile(sourcePath, 'utf8');
-    for (const [name, value] of Object.entries({ sma_length: 3, hvc_threshold: 2.0, ...inputs })) {
+    for (const [name, value] of Object.entries({ sma_length: 2, hvc_threshold: 2.0, ...inputs })) {
         if (value !== null) {
             source = replaceInput(source, name, value);
         }
@@ -42,17 +42,17 @@ async function runIndicator(volumes, inputs = {}, { rawContext = false, unconfir
 
 for (const [timeframe, multiplier] of [['1', 3], ['D', 3], ['2D', 3], ['W', 2], ['2W', 2], ['M', 2], ['3M', 2], ['12M', 2]]) {
     test(`${timeframe} uses the default multiplier with an inclusive boundary`, async () => {
-        // Arrange: a four-bar SMA reaches 3x at volume 90, or 2x at volume 30.
-        const boundary = multiplier === 3 ? 90 : 30;
+        // Arrange: four prior bars average 10, so the boundary is 30 for 3x or 20 for 2x.
+        const boundary = multiplier === 3 ? 30 : 20;
         const inputs = { sma_length: 4, hvc_threshold: null };
 
         for (const offset of [-1, 0, 1]) {
             // Act
-            const plots = await runIndicator([10, 10, 10, boundary + offset], inputs, { timeframe });
+            const plots = await runIndicator([10, 10, 10, 10, boundary + offset], inputs, { timeframe });
 
             // Assert
-            assert.deepEqual(plots['HVC Signal'], [0, 0, 0, offset < 0 ? 0 : 1]);
-            assert.equal(plots['HVC Comparison Threshold'][3], plots['Volume SMA'][3] * multiplier);
+            assert.deepEqual(plots['HVC Signal'], [0, 0, 0, 0, offset < 0 ? 0 : 1]);
+            assert.equal(plots['HVC Comparison Threshold'][4], plots['Volume SMA'][4] * multiplier);
         }
     });
 }
@@ -63,37 +63,60 @@ for (const [timeframe, multiplier] of [['1', 1.5], ['D', 1.5], ['2D', 1.5], ['W'
         const inputs = { sma_length: 4, hvc_threshold: 1.5, hvc_threshold_weekly: 2.5, hvc_threshold_monthly: 3.5 };
 
         // Act
-        const plots = await runIndicator([10, 10, 10, 90], inputs, { timeframe });
+        const plots = await runIndicator([10, 10, 10, 10, 30], inputs, { timeframe });
 
         // Assert: both the diagnostic and shared signal use the selected threshold.
-        assert.equal(plots['HVC Comparison Threshold'][3], 30 * multiplier);
-        assert.deepEqual(plots['HVC Signal'], [0, 0, 0, multiplier <= 3 ? 1 : 0]);
+        assert.equal(plots['HVC Comparison Threshold'][4], 10 * multiplier);
+        assert.deepEqual(plots['HVC Signal'], [0, 0, 0, 0, multiplier <= 3 ? 1 : 0]);
     });
 }
 
 for (const { name, volumes, expected } of [
-    { name: 'below threshold', volumes: [10, 10, 39], expected: 0 },
-    { name: 'exact threshold', volumes: [10, 10, 40], expected: 1 },
-    { name: 'above threshold', volumes: [10, 10, 41], expected: 1 },
+    { name: 'below threshold', volumes: [10, 10, 19], expected: 0 },
+    { name: 'exact threshold', volumes: [10, 10, 20], expected: 1 },
+    { name: 'above threshold', volumes: [10, 10, 21], expected: 1 },
 ]) {
-    test(`current-inclusive SMA detects ${name}`, async () => {
+    test(`prior-bars SMA detects ${name}`, async () => {
         // Arrange / Act
         const plots = await runIndicator(volumes);
 
-        // Assert
+        // Assert: the baseline is the two bars before the current bar.
         assert.deepEqual(plots['Test HVC'], [0, 0, expected]);
-        const expectedSma = volumes.reduce((sum, volume) => sum + volume, 0) / 3;
-        assert.ok(Math.abs(plots['Volume SMA'][2] - expectedSma) < 1e-9);
+        assert.ok(Math.abs(plots['Volume SMA'][2] - 10) < 1e-9);
     });
 }
 
-test('a length-one SMA cannot reach a multiplier above one', async () => {
+test('the current bar is excluded from its own baseline', async () => {
+    // Arrange / Act: a 30x spike over three bars of 10.
+    const plots = await runIndicator([10, 10, 10, 30], { sma_length: 3, hvc_threshold: 3.0 });
+
+    // Assert: inclusive math would give 30 / 15 = 2x and miss the spike.
+    assert.equal(plots['Volume SMA'][3], 10);
+    assert.equal(plots['Test multiplier'][3], 3);
+    assert.deepEqual(plots['Test HVC'], [0, 0, 0, 1]);
+});
+
+test('the include-current-bar option restores the inclusive baseline', async () => {
+    // Arrange / Act: the same spike as above, now averaged with itself.
+    const inputs = { sma_length: 3, hvc_threshold: 3.0, exclude_current_bar: false };
+    const spike = await runIndicator([10, 10, 10, 30], inputs);
+    const boundary = await runIndicator([10, 10, 40], { sma_length: 3, exclude_current_bar: false });
+
+    // Assert: 30 / ((10 + 10 + 30) / 3) is 1.8x, so no HVC; 40 / 20 is exactly 2x.
+    assert.ok(Math.abs(spike['Volume SMA'][3] - 50 / 3) < 1e-9);
+    assert.deepEqual(spike['Test HVC'], [0, 0, 0, 0]);
+    assert.deepEqual(boundary['Test HVC'], [0, 0, 1]);
+    assert.equal(boundary['Test multiplier'][2], 2);
+});
+
+test('a length-one SMA compares each bar to the previous bar', async () => {
     // Arrange / Act
     const plots = await runIndicator([10, 50, 100], { sma_length: 1 });
 
-    // Assert
-    assert.deepEqual(plots['Test multiplier'], [1, 1, 1]);
-    assert.deepEqual(plots['Test HVC'], [0, 0, 0]);
+    // Assert: the first bar has no previous bar, so it has no multiplier.
+    assert.ok(plots['Test multiplier'][0] == null || Number.isNaN(plots['Test multiplier'][0]));
+    assert.deepEqual(plots['Test multiplier'].slice(1), [5, 2]);
+    assert.deepEqual(plots['Test HVC'], [0, 1, 1]);
 });
 
 test('HVE starts at the first positive volume and excludes record ties', async () => {
@@ -108,7 +131,7 @@ test('HVE starts at the first positive volume and excludes record ties', async (
 for (const showHve of [false, true]) {
     test(`HVE marker visibility (${showHve}) does not suppress simultaneous HVC eligibility`, async () => {
         // Arrange / Act
-        const plots = await runIndicator([10, 10, 40], { show_hve_markers: showHve });
+        const plots = await runIndicator([10, 10, 20], { show_hve_markers: showHve });
 
         // Assert: presentation priority is separate from both signal conditions.
         assert.deepEqual(plots['Test HVC'], [0, 0, 1]);
@@ -183,11 +206,11 @@ test('missing current volume is excluded even after the SMA warms up', async () 
 
 test('Data Window diagnostics expose the calculated values', async () => {
     // Arrange / Act
-    const plots = await runIndicator([10, 10, 40]);
+    const plots = await runIndicator([10, 10, 20]);
 
     // Assert
     assert.deepEqual(plots['Volume Multiplier'].slice(2), [2]);
-    assert.deepEqual(plots['HVC Comparison Threshold'].slice(2), [40]);
+    assert.deepEqual(plots['HVC Comparison Threshold'].slice(2), [20]);
     assert.deepEqual(plots['HVC Signal'], [0, 0, 1]);
     assert.deepEqual(plots['HVE Signal'], [1, 0, 1]);
 });
@@ -200,6 +223,7 @@ test('source wires bounded rays, shared formatting, and hidden diagnostics', asy
     assert.match(source, /indicator\([^\n]*max_lines_count = 200/);
     assert.match(source, /show_rays = input\.bool\(false/);
     assert.match(source, /ray_limit = input\.int\(5,.*minval = 1, maxval = 200/);
+    assert.match(source, /^exclude_current_bar = input\.bool\(true,[^\n]*group = 'Volume Settings'/m);
     assert.doesNotMatch(source, /linefill\.new|show_zones|zone_length/);
     assert.match(source, /\/\/@function[^\n]*\ngetMultiplierText\(value\) =>/);
     assert.match(source, /str\.tostring\(value, '0\.0'\) \+ 'x'/);
@@ -213,7 +237,7 @@ test('source wires bounded rays, shared formatting, and hidden diagnostics', asy
 
 test('one live label is allocated before the last bar and displays a fractional multiplier', async () => {
     // Arrange / Act
-    const context = await runIndicator([10, 10, 50], { show_current_multiplier: true }, { rawContext: true });
+    const context = await runIndicator([10, 10, 25], { show_current_multiplier: true }, { rawContext: true });
 
     // Assert: creation timing is observable here, but realtime rollback still needs TradingView.
     const [label] = context.pine.label.all;
@@ -221,7 +245,7 @@ test('one live label is allocated before the last bar and displays a fractional 
     assert.equal(label._createdAtBar, 0);
     assert.equal(label.x, 2);
     assert.equal(label.y, 99);
-    assert.equal(label.text, '2.1x');
+    assert.equal(label.text, '2.5x');
 });
 
 test('the live label shows N/A instead of a stale or absent multiplier', async () => {
@@ -263,7 +287,7 @@ for (const showHve of [false, true]) {
         const inputs = { show_hve_markers: showHve, show_multiplier_labels: true, show_current_multiplier: true };
 
         // Act
-        const context = await runIndicator([10, 10, 40], inputs, { unconfirmed: [2], rawContext: true });
+        const context = await runIndicator([10, 10, 20], inputs, { unconfirmed: [2], rawContext: true });
 
         // Assert: only event outputs wait for close; older levels and diagnostics remain live.
         const values = name => context.plots[name].data.map(point => point.value);
@@ -283,7 +307,7 @@ for (const showHve of [false, true]) {
 
 test('event confirmation preserves historical signals and the running HVE record', async () => {
     // Arrange / Act
-    const historical = await runIndicator([10, 10, 40]);
+    const historical = await runIndicator([10, 10, 20]);
     const simulated = await runIndicator([10, 10, 40, 30], {}, { unconfirmed: [2] });
 
     // Assert: suppressing an output must not suppress the record used on the following bar.
@@ -355,9 +379,9 @@ for (const showRays of [false, true]) {
 }
 
 for (const { volumes, anchors, colors, inputs = {} } of [
-    { volumes: [10, 10, 40], anchors: [0, 2], colors: ['#4CAF50', '#4CAF50'] },
+    { volumes: [10, 10, 20], anchors: [0, 2], colors: ['#4CAF50', '#4CAF50'] },
     { volumes: [100, 10, 10, 40], anchors: [0, 3], colors: ['#4CAF50', '#FF9800'] },
-    { volumes: [10, 10, 40], anchors: [0, 2], colors: ['#2962FF80', '#2962FF80'], inputs: { ray_color_hve: 'color.new(color.blue, 50)', ray_color_hvc: 'color.new(color.red, 25)' } },
+    { volumes: [10, 10, 20], anchors: [0, 2], colors: ['#2962FF80', '#2962FF80'], inputs: { ray_color_hve: 'color.new(color.blue, 50)', ray_color_hvc: 'color.new(color.red, 25)' } },
 ]) {
     test(`close rays use signal colors with HVE markers off (${volumes}; ${colors})`, async () => {
         // Arrange: HVE-only, overlapping HVC/HVE, and HVC-only events have distinct closes.
@@ -430,7 +454,7 @@ for (const showRays of [false, true]) {
         ];
 
         // Act: a later confirmed event replaces the old ray normally.
-        const context = await runIndicator([100, 10, 300, 0, 400, 0], { ray_limit: 1, show_rays: showRays }, { prices, unconfirmed: [2], rawContext: true });
+        const context = await runIndicator([100, 10, 300, 0, 400, 0], { sma_length: 5, ray_limit: 1, show_rays: showRays }, { prices, unconfirmed: [2], rawContext: true });
 
         // Assert: old-ray touches continue until the confirmed replacement, never afterward.
         const values = name => context.plots[name].data.map(point => point.value);
