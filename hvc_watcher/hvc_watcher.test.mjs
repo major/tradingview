@@ -291,19 +291,19 @@ for (const showLive of [false, true]) {
 }
 
 for (const showHve of [false, true]) {
-    test(`events wait for close while diagnostics and older-ray touches stay live (HVE display ${showHve})`, async () => {
+    test(`markers show live while stored events and signals wait for close (HVE display ${showHve})`, async () => {
         // Arrange: simulate an unfinished bar without pretending to simulate realtime rollback.
         const inputs = { show_hve_markers: showHve, show_multiplier_labels: true, show_current_multiplier: true };
 
         // Act
         const context = await runIndicator([10, 10, 20], inputs, { unconfirmed: [2], rawContext: true });
 
-        // Assert: only event outputs wait for close; older levels and diagnostics remain live.
+        // Assert: markers use live volume; signals, rays, and labels still wait for close.
         const values = name => context.plots[name].data.map(point => point.value);
         assert.deepEqual(values('HVC Signal'), [0, 0, 0]);
         assert.deepEqual(values('HVE Signal'), [1, 0, 0]);
-        assert.deepEqual(values('HVC (High Volume Close)').map(Boolean), [false, false, false]);
-        assert.deepEqual(values('HVE (Highest Volume Ever)').map(Boolean), [showHve, false, false]);
+        assert.deepEqual(values('HVC (High Volume Close)').map(Boolean), [false, false, !showHve]);
+        assert.deepEqual(values('HVE (Highest Volume Ever)').map(Boolean), [showHve, false, showHve]);
         assert.deepEqual(values('Test Ray Touch'), [0, 1, 1]);
         assert.equal(values('Volume Multiplier')[2], 2);
         assert.equal(context.pine.line.all.length, 1);
