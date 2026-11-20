@@ -27,7 +27,7 @@ async function runIndicator(volumes, inputs = {}, { rawContext = false, unconfir
         const confirmed = unconfirmed.map(index => `bar_index != ${index}`).join(' and ');
         source = source.replaceAll('barstate.isconfirmed', `(barstate.isconfirmed and ${confirmed})`);
     }
-    source += '\nplot(is_hvc ? 1 : 0, title = "Test HVC")\nplot(is_hve ? 1 : 0, title = "Test HVE")\nplot(volume_multiplier, title = "Test multiplier")\nplot(ray_touched ? 1 : 0, title = "Test Ray Touch")\nplot(array.size(event_rays), title = "Test Ray Count")\n';
+    source += '\nplot(is_hvc ? 1 : 0, title = "Test HVC")\nplot(is_hvc_raw ? 1 : 0, title = "Test HVC Live")\nplot(is_hve ? 1 : 0, title = "Test HVE")\nplot(volume_multiplier, title = "Test multiplier")\nplot(ray_touched ? 1 : 0, title = "Test Ray Touch")\nplot(array.size(event_rays), title = "Test Ray Count")\n';
     const bars = volumes.map((volume, index) => ({
         open: 100, high: 102, low: 99, close: 101, ...prices[index], volume,
         openTime: Date.UTC(2020, 0, 1) + index * 86400000,
@@ -167,6 +167,15 @@ test('alert conditions use detection flags, not marker visibility', async () => 
     assert.match(source, /alertcondition\(is_hve or is_hvc, title = 'HVE or HVC'/);
 });
 
+test('HVC Live alert watches the raw threshold with an intrabar message', async () => {
+    // Arrange
+    const source = await readFile(sourcePath, 'utf8');
+    const alert = "alertcondition(is_hvc_raw, title = 'HVC Live', message = 'HVC Live (threshold crossed before close) on {{ticker}} [{{interval}}], close={{close}}, volume multiplier={{plot(\"Volume Multiplier\")}}x')";
+
+    // Act / Assert: the live alert must not use the close-gated HVC signal.
+    assert.ok(source.includes(alert));
+});
+
 test('zero volume suppresses signals and an unavailable baseline has no multiplier', async () => {
     // Arrange / Act
     const plots = await runIndicator([0, 0, 0, 0]);
@@ -282,19 +291,19 @@ for (const showLive of [false, true]) {
 }
 
 for (const showHve of [false, true]) {
-    test(`events wait for close while diagnostics and older-ray touches stay live (HVE display ${showHve})`, async () => {
+    test(`markers show live while stored events and signals wait for close (HVE display ${showHve})`, async () => {
         // Arrange: simulate an unfinished bar without pretending to simulate realtime rollback.
         const inputs = { show_hve_markers: showHve, show_multiplier_labels: true, show_current_multiplier: true };
 
         // Act
         const context = await runIndicator([10, 10, 20], inputs, { unconfirmed: [2], rawContext: true });
 
-        // Assert: only event outputs wait for close; older levels and diagnostics remain live.
+        // Assert: markers use live volume; signals, rays, and labels still wait for close.
         const values = name => context.plots[name].data.map(point => point.value);
         assert.deepEqual(values('HVC Signal'), [0, 0, 0]);
         assert.deepEqual(values('HVE Signal'), [1, 0, 0]);
-        assert.deepEqual(values('HVC (High Volume Close)').map(Boolean), [false, false, false]);
-        assert.deepEqual(values('HVE (Highest Volume Ever)').map(Boolean), [showHve, false, false]);
+        assert.deepEqual(values('HVC (High Volume Close)').map(Boolean), [false, false, !showHve]);
+        assert.deepEqual(values('HVE (Highest Volume Ever)').map(Boolean), [showHve, false, showHve]);
         assert.deepEqual(values('Test Ray Touch'), [0, 1, 1]);
         assert.equal(values('Volume Multiplier')[2], 2);
         assert.equal(context.pine.line.all.length, 1);
@@ -304,6 +313,18 @@ for (const showHve of [false, true]) {
         assert.equal(labels[0].text, '2.0x');
     });
 }
+
+test('HVC Live condition fires on an unconfirmed crossing while HVC Signal waits for close', async () => {
+    // Arrange: bar 2 crosses while unconfirmed; bar 4 crosses after its close.
+    const volumes = [10, 10, 20, 10, 30];
+
+    // Act
+    const plots = await runIndicator(volumes, {}, { unconfirmed: [2] });
+
+    // Assert: the live condition ignores confirmation; confirmed bars match the close-gated signal.
+    assert.deepEqual(plots['Test HVC Live'], [0, 0, 1, 0, 1]);
+    assert.deepEqual(plots['HVC Signal'], [0, 0, 0, 0, 1]);
+});
 
 test('event confirmation preserves historical signals and the running HVE record', async () => {
     // Arrange / Act
@@ -331,14 +352,15 @@ test('dependent controls and alert context are wired without changing alert titl
         assert.match(source, new RegExp(`^${name} = input\\.color\\([^\\n]*active = ${toggle}`, 'm'));
     }
     const alerts = source.match(/^alertcondition\(.*$/gm);
-    assert.equal(alerts.length, 4);
+    assert.equal(alerts.length, 5);
     for (const alert of alerts) {
         assert.ok(alert.includes('{{ticker}}'));
         assert.ok(alert.includes('{{interval}}'));
         assert.ok(alert.includes('{{close}}'));
     }
-    assert.ok(alerts.slice(0, 3).every(alert => alert.includes('{{plot("Volume Multiplier")}}')));
-    assert.match(alerts[3], /alertcondition\(ray_touched, title = 'Event Ray Touch'/);
+    assert.ok(alerts.slice(0, 4).every(alert => alert.includes('{{plot("Volume Multiplier")}}')));
+    assert.match(alerts[3], /alertcondition\(is_hvc_raw, title = 'HVC Live'/);
+    assert.match(alerts[4], /alertcondition\(ray_touched, title = 'Event Ray Touch'/);
 });
 
 test('marker color and opacity changes preserve ray defaults', async () => {

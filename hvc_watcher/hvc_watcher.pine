@@ -67,9 +67,9 @@ is_hvc_raw = not na(volume) and volume > 0 and not na(volume_sma) and volume_sma
 is_hve = is_hve_raw and barstate.isconfirmed
 is_hvc = is_hvc_raw and barstate.isconfirmed
 
-// Determine which markers to show (HVE takes priority over HVC to avoid overlap)
-show_hve = show_hve_markers and is_hve
-show_hvc = is_hvc and not show_hve
+// 🎯 Markers show live: volume only grows within a bar, so a crossing does not undo itself, apart from feed revisions. Rays, labels, and the regular HVE/HVC alerts still wait for close. HVE takes priority over HVC to avoid overlap.
+show_hve = show_hve_markers and is_hve_raw
+show_hvc = is_hvc_raw and not show_hve
 
 //@function Map a shape style string to its plotshape constant.
 getShape(style) =>
@@ -143,6 +143,8 @@ if show_current_multiplier and barstate.islast
 alertcondition(is_hve, title = 'HVE', message = 'HVE (loaded-history volume record) on {{ticker}} [{{interval}}], close={{close}}, volume multiplier={{plot("Volume Multiplier")}}x')
 alertcondition(is_hvc, title = 'HVC', message = 'HVC on {{ticker}} [{{interval}}], close={{close}}, volume multiplier={{plot("Volume Multiplier")}}x')
 alertcondition(is_hve or is_hvc, title = 'HVE or HVC', message = 'HVE or HVC on {{ticker}} [{{interval}}], close={{close}}, volume multiplier={{plot("Volume Multiplier")}}x')
+// ⚡ HVC Live fires before close, as soon as volume crosses the threshold. Pick TradingView's "Once Per Bar" frequency to get one alert when the bar first crosses.
+alertcondition(is_hvc_raw, title = 'HVC Live', message = 'HVC Live (threshold crossed before close) on {{ticker}} [{{interval}}], close={{close}}, volume multiplier={{plot("Volume Multiplier")}}x')
 alertcondition(ray_touched, title = 'Event Ray Touch', message = 'Price touched an earlier HVC/HVE close ray on {{ticker}} [{{interval}}], close={{close}}')
 
 // Display current values in data window
